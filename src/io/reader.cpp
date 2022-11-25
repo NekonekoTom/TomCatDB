@@ -34,8 +34,6 @@ Status SequentialReader::Read(DBFile* file, std::string& ret,
     return Status::FileIOError("No specified file.");
   }
 
-  // Calling this function will possibly try to open or re-open the DBFile.
-  // Returns Status::FileIOError when the attempt failed.
   Status ret_status = IsCorrectlyOpened(file);
   if (!ret_status.StatusNoError()) {
     ret = "";
@@ -76,7 +74,7 @@ Status SequentialReader::InternalRead(DBFile* file, std::string& ret,
     read_bytes = read(file->fd(), buffer(), size);
     // perror("read:"); // For test
     if (read_bytes == size) {
-      // Successful read
+      // Successfully read
       ret = std::string(buffer(), read_bytes);
       return Status::NoError();
     } else {
@@ -92,7 +90,7 @@ Status SequentialReader::InternalRead(DBFile* file, std::string& ret,
       uint64_t rb = read_bytes;
       read_bytes += read(file->fd(), buffer(), kMaxBufferSize);
       if (read_bytes == rb + kMaxBufferSize) {
-        // Successful read
+        // Successfully read
         ret += std::string(buffer(), kMaxBufferSize);
         // Do not need to clear the buffer,
         // because new data will overwrite the buffer space.
@@ -104,7 +102,7 @@ Status SequentialReader::InternalRead(DBFile* file, std::string& ret,
     // Last iter
     read_bytes += read(file->fd(), buffer(), size - read_bytes);
     if (read_bytes == size) {
-      // Successful read
+      // Successfully read
       ret += std::string(buffer(), size % kMaxBufferSize);
       return Status::NoError();
     } else {
@@ -117,8 +115,19 @@ Status SequentialReader::InternalRead(DBFile* file, std::string& ret,
 
 RandomReader::~RandomReader() {}
 
-Status RandomReader::Read(DBFile* file, std::string& ret, const uint64_t size) {
+Status RandomReader::Read(DBFile* file, std::string& ret, const uint64_t size,
+                          const ::ssize_t offset) {
   // TODO
+  return Status::UndefinedError();
+}
 
-  return Status::FileIOError();
+Status RandomReader::ReadEntire(DBFile* file, std::string& ret) {
+  // TODO
+  return Status::UndefinedError();
+}
+
+Status RandomReader::InternalRead(DBFile* file, std::string& ret,
+                                  const uint64_t size, const ::ssize_t offset) {
+  // TODO
+  return Status::UndefinedError();
 }
