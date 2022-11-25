@@ -57,7 +57,7 @@ Status BaseWriter::WriteNewFile() {
 
   dbfile_->Close();
   ClearBuffer();  // Reset buffer
-  return Status();
+  return Status::NoError();
 }
 
 Status BaseWriter::WriteAppendFile() {
@@ -86,7 +86,7 @@ Status BaseWriter::WriteAppendFile() {
 
   dbfile_->Close();
   ClearBuffer();  // Reset buffer
-  return Status();
+  return Status::NoError();
 }
 
 BaseWriter::~BaseWriter() {

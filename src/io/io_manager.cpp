@@ -5,12 +5,21 @@ IOManager::IOManager(const std::string& files_dir) : kDatabaseDir(files_dir) {
   if (access(kDatabaseDir.c_str(), F_OK | W_OK | X_OK) != 0) {
     // Assert fails when the directory did not have the desired permissions
     // or mkdir() operation failed
-    assert(mkdir(kDatabaseDir.c_str(), 0744) == 0); // Must have rwx permission
+    assert(mkdir(kDatabaseDir.c_str(), 0744) == 0);  // Must have rwx permission
   }
 
-  BuildFile(&manifest_, kManifestFilename);
+  // Push manifest writer into writers_
+  BuildMetadataFile(&manifest_, kManifestFilename);
 
-  BuildFile(&log_file_, kLogFilename);
+  // For test
+  writers_[0]->AppendToBuffer(Sequence("\n00000000.tdb"));
+  writers_[0]->WriteAppendFile();
+
+  // Push log writer into writers_
+  BuildMetadataFile(&log_file_, kLogFilename);
+
+  for (int i = 0; i < kDefaultReaderNum; ++i)
+    readers_.push_back(new SequentialReader(kDefaultReaderBufferSize));
 }
 
 IOManager::~IOManager() {
@@ -24,15 +33,31 @@ IOManager::~IOManager() {
 }
 
 Status IOManager::WriteLevel0File() {
-  // TODO
   // Read from manifest
+  if (readers_.empty()) {
+    return Status::FileIOError("No available Reader.");
+  }
+
+  SequentialReader* reader = readers_.back();
+  readers_.pop_back();
+
+  std::string manifest_content;
+  Status ret =
+      reader->ReadEntire(new DBFile(kDatabaseDir + "/" + kManifestFilename,
+                                    DBFile::Mode::kReadOnly),
+                         manifest_content);
+  if (!ret.StatusNoError()) {
+    return ret;
+  }
 
   // If level0 file num exceed kDefaultLevel0FileNum, push level0 to level1
 
   // Write level0 file
+
+  return Status::UndefinedError();
 }
 
-void IOManager::BuildFile(DBFile** file, const std::string& filename) {
+void IOManager::BuildMetadataFile(DBFile** file, const std::string& filename) {
   *file = new DBFile(kDatabaseDir + "/" + filename, DBFile::Mode::kNewFile);
   assert((*file)->IsOpened());
 

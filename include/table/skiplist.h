@@ -13,6 +13,11 @@ struct SkipListNode {
   SkipListNode(const K& key, const int size)
       : key_(key), next_(size > 0 ? new SkipListNode<K>*[size] : nullptr) {}
 
+  ~SkipListNode() {
+    if (next_ != nullptr)
+      delete[] next_;
+  }
+
   const K key_;
 
   // The value member is unnecessary since we designed to store an entire Record
@@ -61,7 +66,7 @@ class SkipList {
   bool IsNodeAscend() {
     SkipListNode<K>* p = head_;
     while (p->next_[0] != tail_) {
-      if (comparator_.Greater(p->key_, p->next_[0]->key_))
+      if (comparator_->Greater(p->key_, p->next_[0]->key_))
         return false;
       p = p->next_[0];
     }
@@ -99,12 +104,12 @@ class SkipList {
   // SkipListNode<K>* last_node_[];
   SkipListNode<K>** last_node_;
 
-  Cmp comparator_;
+  const Cmp* comparator_;
 };
 
 template <typename K, class Cmp>
 SkipList<K, Cmp>::SkipList(const Cmp* comparator, const K& last_key)
-    : size_(0), levels_(0), comparator_(*comparator) {
+    : size_(0), levels_(0), comparator_(comparator) {
 
   // // K must have default constructor
   // K key;  // Dummy key
@@ -120,7 +125,20 @@ SkipList<K, Cmp>::SkipList(const Cmp* comparator, const K& last_key)
 }
 
 template <typename K, class Cmp>
-SkipList<K, Cmp>::~SkipList() {}
+SkipList<K, Cmp>::~SkipList() {
+  if (head_ != nullptr) {
+    delete head_;
+  }
+  if (tail_ != nullptr) {
+    delete tail_;
+  }
+  if (last_node_ != nullptr) {
+    delete[] last_node_;
+  }
+  if (comparator_ != nullptr) {
+    delete comparator_;
+  }
+}
 
 template <typename K, class Cmp>
 const SkipListNode<K>* SkipList<K, Cmp>::Get(const K& key) {
@@ -129,14 +147,14 @@ const SkipListNode<K>* SkipList<K, Cmp>::Get(const K& key) {
 
   for (int i = levels_; i >= 0; --i) {
     while (before_node->next_[i] != tail_ &&
-           !(comparator_.GreaterOrEquals(before_node->next_[i]->key_, key))) {
+           !(comparator_->GreaterOrEquals(before_node->next_[i]->key_, key))) {
       before_node = before_node->next_[i];
     }
   }
 
   // The correct implementation of the SkipList should be as follows:
   // **********************************************************
-  // if (comparator_.Equal(before_node->next_[0]->key_, key)) {
+  // if (comparator_->Equal(before_node->next_[0]->key_, key)) {
   //   return before_node->next_[0];
   // }
   // **********************************************************
@@ -146,7 +164,7 @@ const SkipListNode<K>* SkipList<K, Cmp>::Get(const K& key) {
   // uint64_t, to check if the key is in the SkipList, we should compare
   // the key with the before_node's key instead of before_node->next_[0]'s
   // in normal implementation.
-  if (comparator_.Equal(before_node->key_, key)) {
+  if (comparator_->Equal(before_node->key_, key)) {
     return before_node;
   }
 
@@ -158,7 +176,7 @@ SkipListNode<K>* SkipList<K, Cmp>::Search(const K& key) const {
   SkipListNode<K>* before_node = head_;
   for (int i = levels_; i >= 0; --i) {
     while (before_node->next_[i] != tail_ &&
-           !(comparator_.GreaterOrEquals(before_node->next_[i]->key_, key))) {
+           !(comparator_->GreaterOrEquals(before_node->next_[i]->key_, key))) {
       before_node = before_node->next_[i];
     }
     last_node_[i] = before_node;
@@ -169,8 +187,8 @@ SkipListNode<K>* SkipList<K, Cmp>::Search(const K& key) const {
 template <typename K, class Cmp>
 const int SkipList<K, Cmp>::Insert(const K& key) {
   SkipListNode<K>* node = Search(key);
-  // Commented when testing comparator_.Equal for Get
-  // if (comparator_.Equal(node->key_, key)) {
+  // Commented when testing comparator_->Equal for Get
+  // if (comparator_->Equal(node->key_, key)) {
   //   // Key exists, update value
 
   //   // No value member in our design

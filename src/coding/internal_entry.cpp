@@ -23,7 +23,7 @@ Status InternalEntry::EncodeInternal(const Sequence& key, const Sequence& value,
     memcpy(intnl_ptr, value.data(), value.size());
   }
 
-  return Status();
+  return Status::NoError();
 }
 
 InternalEntry::OpType InternalEntry::EntryOpType(const char* internal_entry) {

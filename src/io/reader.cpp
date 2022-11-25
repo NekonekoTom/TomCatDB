@@ -3,8 +3,6 @@
 BaseReader::~BaseReader() {
   if (buffer_ != nullptr)
     delete buffer_;
-  // if (dbfile_ != nullptr)
-  //   delete dbfile_;
 }
 
 Status BaseReader::IsCorrectlyOpened(DBFile* file) {
@@ -77,40 +75,20 @@ Status SequentialReader::InternalRead(DBFile* file, std::string& ret,
       // Successfully read
       ret = std::string(buffer(), read_bytes);
       return Status::NoError();
-    } else {
-      ret = "";
-      return Status::FileIOError("Unable to read all " + std::to_string(size) +
-                                 " bytes.");
     }
   } else {
-    // Clear ret buffer first
-    ret.clear();
+    // Allocate enough space at once
+    ret = std::string(size, '\0');
 
-    while (size - read_bytes >= kMaxBufferSize) {
-      uint64_t rb = read_bytes;
-      read_bytes += read(file->fd(), buffer(), kMaxBufferSize);
-      if (read_bytes == rb + kMaxBufferSize) {
-        // Successfully read
-        ret += std::string(buffer(), kMaxBufferSize);
-        // Do not need to clear the buffer,
-        // because new data will overwrite the buffer space.
-      } else {
-        return Status::FileIOError("Unable to read all " +
-                                   std::to_string(size) + " bytes.");
-      }
-    }
-    // Last iter
-    read_bytes += read(file->fd(), buffer(), size - read_bytes);
+    read_bytes = read(file->fd(), const_cast<char*>(ret.c_str()), size);
     if (read_bytes == size) {
       // Successfully read
-      ret += std::string(buffer(), size % kMaxBufferSize);
       return Status::NoError();
-    } else {
-      ret = "";
-      return Status::FileIOError("Unable to read all " + std::to_string(size) +
-                                 " bytes.");
     }
   }
+  ret = "";
+  return Status::FileIOError("Unable to read all " + std::to_string(size) +
+                             " bytes.");
 }
 
 RandomReader::~RandomReader() {}
