@@ -39,6 +39,9 @@ class BaseReader {
   // Access function
   char* buffer() { return buffer_; }
 
+ protected:
+  Status IsCorrectlyOpened(DBFile* file);
+
  private:
   char* buffer_ = nullptr;
   bool required_sync_;

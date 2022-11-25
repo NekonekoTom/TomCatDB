@@ -7,6 +7,25 @@ BaseReader::~BaseReader() {
   //   delete dbfile_;
 }
 
+Status BaseReader::IsCorrectlyOpened(DBFile* file) {
+  // Not opened
+  if (!file->IsOpened()) {
+    file->set_mode(DBFile::Mode::kReadOnly);
+    if (!file->Open()) {
+      return Status::FileIOError("File failed to be opened.");
+    }
+  }
+  // Wrong open mode
+  if (file->mode() != DBFile::Mode::kReadOnly) {
+    file->Close();
+    file->set_mode(DBFile::Mode::kReadOnly);
+    if (!file->Open()) {
+      return Status::FileIOError("Wrong open mode for the file.");
+    }
+  }
+  return Status::NoError();
+}
+
 SequentialReader::~SequentialReader() {}
 
 Status SequentialReader::Read(DBFile* file, std::string& ret,
@@ -36,21 +55,9 @@ Status SequentialReader::ReadEntire(DBFile* file, std::string& ret,
 Status SequentialReader::InternalRead(DBFile* file, std::string& ret,
                                       const uint64_t size,
                                       const ::ssize_t offset) {
-  // Not opened
-  if (!file->IsOpened()) {
-    file->set_mode(DBFile::Mode::kReadOnly);
-    if (!file->Open()) {
-      return Status::FileIOError("File failed to be opened.");
-    }
-  }
-  // Wrong open mode
-  if (file->mode() != DBFile::Mode::kReadOnly) {
-    file->Close();
-    file->set_mode(DBFile::Mode::kReadOnly);
-    if (!file->Open()) {
-      return Status::FileIOError("Wrong open mode for the file.");
-    }
-  }
+  // Calling this function will possibly try to open or re-open the DBFile.
+  // Returns Status::FileIOError when the attempt failed.
+  IsCorrectlyOpened(file);
 
   // Move file pointer to (current position + offset)
   // auto what = lseek(file->fd(), offset, SEEK_CUR); // For test

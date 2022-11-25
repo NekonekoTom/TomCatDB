@@ -37,7 +37,7 @@ int main() {
   DBFile* file = new DBFile("./db/MANIFEST", DBFile::Mode::kReadOnly);
 
   std::string retstr;
-  Status retstatu = sr.Read(file, retstr, 6);
+  Status retstatu = sr.Read(file, retstr, 12);
 
   return 0;
 }
