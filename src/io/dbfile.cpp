@@ -26,6 +26,7 @@ bool DBFile::Open() {
     default:
       fd_ = -1;
   }
+  // perror("file open status"); // For test
   return IsOpened();
 }
 

@@ -34,19 +34,31 @@ Status SequentialReader::Read(DBFile* file, std::string& ret,
     return Status::FileIOError("No specified file.");
   }
 
-  Status ret_status = InternalRead(file, ret, size, offset);
+  // Calling this function will possibly try to open or re-open the DBFile.
+  // Returns Status::FileIOError when the attempt failed.
+  Status ret_status = IsCorrectlyOpened(file);
+  if (!ret_status.StatusNoError()) {
+    ret = "";
+  } else {
+    ret_status = InternalRead(file, ret, size, offset);
+  }
 
   delete file;
   return ret_status;
 }
 
-Status SequentialReader::ReadEntire(DBFile* file, std::string& ret,
-                                    const uint64_t size) {
+Status SequentialReader::ReadEntire(DBFile* file, std::string& ret) {
   if (file == nullptr) {
     return Status::FileIOError("No specified file.");
   }
 
-  Status ret_status = InternalRead(file, ret, size, 0);
+  Status ret_status = IsCorrectlyOpened(file);
+  if (!ret_status.StatusNoError()) {
+    ret = "";
+  } else {
+    uint64_t size = lseek(file->fd(), 0, SEEK_END);
+    ret_status = InternalRead(file, ret, size, 0);
+  }
 
   delete file;
   return ret_status;
@@ -55,12 +67,8 @@ Status SequentialReader::ReadEntire(DBFile* file, std::string& ret,
 Status SequentialReader::InternalRead(DBFile* file, std::string& ret,
                                       const uint64_t size,
                                       const ::ssize_t offset) {
-  // Calling this function will possibly try to open or re-open the DBFile.
-  // Returns Status::FileIOError when the attempt failed.
-  IsCorrectlyOpened(file);
-
-  // Move file pointer to (current position + offset)
-  // auto what = lseek(file->fd(), offset, SEEK_CUR); // For test
+  // Move file pointer to (beginning + offset)
+  // auto what = lseek(file->fd(), offset, SEEK_SET); // For test
   lseek(file->fd(), offset, SEEK_SET);
 
   uint64_t read_bytes = 0;
@@ -77,6 +85,9 @@ Status SequentialReader::InternalRead(DBFile* file, std::string& ret,
                                  " bytes.");
     }
   } else {
+    // Clear ret buffer first
+    ret.clear();
+
     while (size - read_bytes >= kMaxBufferSize) {
       uint64_t rb = read_bytes;
       read_bytes += read(file->fd(), buffer(), kMaxBufferSize);

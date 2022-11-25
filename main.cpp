@@ -28,16 +28,16 @@ int main() {
   db.Insert(Sequence("kk352"), Sequence("uuha"));
   db.Insert(Sequence("ak322"), Sequence("auha"));
 
-  auto ret = db.EntrySet();
+  auto entry_set = db.EntrySet();
 
   db.TestEntryPoint();
 
   SequentialReader sr(8);
 
-  DBFile* file = new DBFile("./db/MANIFEST", DBFile::Mode::kReadOnly);
-
   std::string retstr;
-  Status retstatu = sr.Read(file, retstr, 12);
+  Status retstatu = sr.Read(new DBFile("./db/MANIFEST", DBFile::Mode::kReadOnly), retstr, 12);
+
+  retstatu = sr.ReadEntire(new DBFile("./db/MANIFEST", DBFile::Mode::kReadOnly), retstr);
 
   return 0;
 }

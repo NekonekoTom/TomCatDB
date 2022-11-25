@@ -34,7 +34,7 @@ class BaseReader {
   virtual Status Read(DBFile* file, std::string& ret, const uint64_t size,
                       const ::ssize_t offset) = 0;
   
-  virtual Status ReadEntire(DBFile* file, std::string& ret, const uint64_t size) = 0;
+  virtual Status ReadEntire(DBFile* file, std::string& ret) = 0;
 
   // Access function
   char* buffer() { return buffer_; }
@@ -62,9 +62,10 @@ class SequentialReader : public BaseReader {
   virtual Status Read(DBFile* file, std::string& ret, const uint64_t size,
                       const ::ssize_t offset = 0);
 
-  virtual Status ReadEntire(DBFile* file, std::string& ret, const uint64_t size);
+  virtual Status ReadEntire(DBFile* file, std::string& ret);
 
  private:
+  // Before calling this function, user should ensure the DBFile ptr is valid.
   virtual Status InternalRead(DBFile* file, std::string& ret,
                               const uint64_t size, const ::ssize_t offset);
 };
