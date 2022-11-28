@@ -12,7 +12,7 @@ TCTable::~TCTable() {
     delete mem_allocator_;
 }
 
-const Sequence* TCTable::Get(const Sequence& key) {
+const Sequence TCTable::Get(const Sequence& key) const {
   uint64_t entry_size = coding::SizeOfVarint(key.size()) + key.size() + 9;
 
   table_lock_.Lock();
@@ -38,7 +38,7 @@ const Sequence* TCTable::Get(const Sequence& key) {
     }
   }
 
-  return nullptr;
+  return Sequence();
 }
 
 Status TCTable::Insert(const Sequence& key, const Sequence& value) {
@@ -83,7 +83,7 @@ Status TCTable::Delete(const Sequence& key) {
   return Status::NoError();
 }
 
-bool TCTable::ContainsKey(const Sequence& key) {
+bool TCTable::ContainsKey(const Sequence& key) const {
   uint64_t entry_size = coding::SizeOfVarint(key.size()) + key.size() + 9;
 
   table_lock_.Lock();

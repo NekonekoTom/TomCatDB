@@ -4,9 +4,9 @@
 #include "comparator.h"
 #include "internal_entry.h"
 #include "mem_allocator.h"
+#include "raii_lock.h"
 #include "skiplist.h"
 #include "status.h"
-#include "raii_lock.h"
 
 // In-memory volatile table for fast access to latest data
 // The TCTable is guaranteed to be thread-safe
@@ -25,17 +25,17 @@ class TCTable {
 
   ~TCTable();
 
-  const Sequence* Get(const Sequence& key);
+  const Sequence Get(const Sequence& key) const;
 
   Status Insert(const Sequence& key, const Sequence& value);
 
   Status Delete(const Sequence& key);
 
   // Similar to Get()
-  bool ContainsKey(const Sequence& key);
+  bool ContainsKey(const Sequence& key) const;
 
-  // For test
-  const std::vector<const char*> EntrySet() { return table_.EntrySet(); }
+  // Return read-only entry set for deserialization
+  const std::vector<const char*> EntrySet() const { return table_.EntrySet(); }
 
  private:
   // Stores char pointers only, the actual resources are managed by mem_allocator_

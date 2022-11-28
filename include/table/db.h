@@ -13,7 +13,7 @@ class TCDB {
 
   ~TCDB();
 
-  const Sequence* Get(const Sequence& key);
+  const Sequence Get(const Sequence& key);
 
   Status Insert(const Sequence& key, const Sequence& value);
 

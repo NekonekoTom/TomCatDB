@@ -8,6 +8,7 @@
 
 #include "base.h"
 #include "dbfile.h"
+#include "internal_entry.h"
 #include "sequence.h"
 #include "status.h"
 
@@ -44,10 +45,40 @@ class BaseWriter {
   const int pos() const { return pos_; }
 
  private:
-  char* buffer_;
-  int pos_;  // Points to the end of char sequence in buffer_
-  bool required_sync_;
-  DBFile* dbfile_;
+  char* buffer_ = nullptr;
+  int pos_ = 0;  // Points to the end of char sequence in buffer_
+  bool required_sync_ = false;
+  DBFile* dbfile_ = nullptr;
+};
+
+class BatchWriter : private BaseWriter {
+ public:
+  BatchWriter() = default;
+  explicit BatchWriter(DBFile* dbf_ptr, const int max_buffer_size = 1024);
+
+  BatchWriter(const BatchWriter&) = delete;
+  BatchWriter& operator=(const BatchWriter&) = delete;
+
+  ~BatchWriter() = default;
+
+  // Write a Sequence batch to DBFile, call the second WriteBatch below
+  Status WriteBatch(const std::vector<Sequence>& entries);
+
+  // Write a Sequence batch to DBFile,
+  // the batch ranges from entries[begin] to entries[end - 1]
+  Status WriteBatch(const std::vector<Sequence>& entries,
+                    std::vector<Sequence>::size_type begin,
+                    std::vector<Sequence>::size_type end);
+
+  // Write a const char* batch to DBFile, call WriteBatch()(Sequence version)
+  Status WriteBatch(const std::vector<const char*>& entries);
+
+  // Convenient function for the purpose of reusing BatchWriter object
+  // to quickly write a short char sequence.
+  Status WriteFragment(const char* fragment, int fragment_size);
+
+ private:
+  // TODO: Any data members? Use static functions instead?
 };
 
 #endif

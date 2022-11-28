@@ -18,13 +18,3 @@ const std::string Config::GetConfig(const std::string& name) const {
   }
   return std::string("");
 }
-
-// std::string DBFile::ToAbsolutePath(const std::string& file_name) {
-//   if (file_name[0] == '.') {
-//     std::string curdir = get_current_dir_name();
-//     // Skip this module's relative path: ./src/io
-//     curdir = std::string(curdir.begin(), curdir.end() - 7);
-//     return curdir + "/" + file_name.substr(2, file_name.size() - 2);
-//   }
-//   return file_name;
-// }

@@ -3,11 +3,11 @@
 TCDB::TCDB(const Config& config)
     : global_lock_(mutex_),
       volatile_table_(new TCTable(global_lock_)),
-      io_manager_(config.GetConfig("database_dir")) {}
+      io_manager_(config.GetConfig("database_dir"), global_lock_) {}
 
 TCDB::~TCDB() {}
 
-const Sequence* TCDB::Get(const Sequence& key) {
+const Sequence TCDB::Get(const Sequence& key) {
   // TODO
   return volatile_table_->Get(key);
 }
@@ -28,10 +28,10 @@ bool TCDB::ContainsKey(const Sequence& key) {
 }
 
 Status TCDB::TransferTable(const TCTable** immutable) {
-  global_lock_.Lock();
+  // global_lock_.Lock();
   *immutable = volatile_table_;
   volatile_table_ = new TCTable(global_lock_);
-  global_lock_.Unlock();
+  // global_lock_.Unlock();
 
   return *immutable != nullptr ? Status::NoError() : Status::UndefinedError();
 }
@@ -44,7 +44,9 @@ Status TCDB::WriteLevel0() {
     return Status::UndefinedError();
   }
 
-  io_manager_.WriteLevel0File();
+  assert(io_manager_.WriteLevel0File(immutable).StatusNoError());
+
+  delete immutable;
 
   return Status::NoError();
 }

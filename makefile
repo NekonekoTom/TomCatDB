@@ -55,7 +55,7 @@ $(BUILD):
 	
 $(OUTPUT) : $(OBJ)
 	@echo "<Executing> Generating main.out and linking .o files ..."
-	$(GCC) $(MAIN) $^ -o $@ $(INCLUDES) $(FLAGS)
+	@$(GCC) $(MAIN) $^ -o $@ $(INCLUDES) $(FLAGS)
 $(word 1,$(dir $(OBJ_CODING)))%.o : $(word 1,$(dir $(SRC_CODING)))%.cpp
 	@echo "<Executing> Compiling $< targets ..."
 	@$(GCC) -c $< -o $@ $(INCLUDES) $(FLAGS)
@@ -72,17 +72,10 @@ $(word 1,$(dir $(OBJ_UTIL)))%.o : $(word 1,$(dir $(SRC_UTIL)))%.cpp
 CLEAN_INTERMEDIATE_FILES : $(OUTPUT)
 	@echo "<Executing> Cleaning intermediate files ..."
 	@rm -r $(BUILD)
-
-.PHONY : test
-test : $(BUILD) $(TEST_OUTPUT)
-# $(BUILD):
-# 	mkdir $(BUILD)
-$(TEST_OUTPUT) : $(OBJ)
-	$(GCC) $(TEST_MAIN) $^ -o $@ $(INCLUDES) $(FLAGS)
-# $(BUILD)/%.o : $(SRC_FOLDER)/%.cpp
-# 	$(GCC) -c $< -o $@ $(FLAGS)
+	-@rm -r ./db 2>/dev/null
 
 .PHONY : clean
 clean :
 	@echo "<Executing> Cleaning target ..."
 	-@rm -r $(BUILD) $(OUTPUT) $(TEST_OUTPUT) 2>/dev/null
+	-@rm -r ./db 2>/dev/null

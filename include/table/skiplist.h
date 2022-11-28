@@ -40,7 +40,7 @@ class SkipList {
   ~SkipList();
 
   // Get node by key
-  const SkipListNode<K>* Get(const K& key);
+  const SkipListNode<K>* Get(const K& key) const;
 
   // Insert a key-value pair
   // Return:
@@ -141,7 +141,7 @@ SkipList<K, Cmp>::~SkipList() {
 }
 
 template <typename K, class Cmp>
-const SkipListNode<K>* SkipList<K, Cmp>::Get(const K& key) {
+const SkipListNode<K>* SkipList<K, Cmp>::Get(const K& key) const {
   // The closest node to key node on the left
   SkipListNode<K>* before_node = head_;
 

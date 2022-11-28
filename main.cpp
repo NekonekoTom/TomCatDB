@@ -19,18 +19,18 @@
 #include "skiplist.h"
 #include "thread_pool.h"
 #include "varint.h"
+#include "tools.h"
 
 int main() {
   // TCDB db(Config());
   Config config;
   TCDB db(config);
 
-  db.Insert(Sequence("kk352"), Sequence("uuha"));
+  db.Insert(Sequence("kk352"), Sequence("uuha")); // InternalEntry size: 20
   db.Insert(Sequence("ak322"), Sequence("auha"));
+  db.Delete(Sequence("ak322"));                   // InternalEntry size: 15
 
   auto entry_set = db.EntrySet();
-
-  db.TestEntryPoint();
 
   SequentialReader sr(8);
 
@@ -40,6 +40,8 @@ int main() {
   retstatu = sr.Read(new DBFile("./db/MANIFEST", DBFile::Mode::kReadOnly), retstr, 97);
 
   retstatu = sr.ReadEntire(new DBFile("./db/MANIFEST", DBFile::Mode::kReadOnly), retstr);
+
+  db.TestEntryPoint();
 
   return 0;
 }

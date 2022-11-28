@@ -27,14 +27,18 @@ class InternalEntry {
                                const uint64_t id, const OpType op_type,
                                char* internal_entry);
 
-  // Retuen OpType of the given InternalEntry
+  // Return OpType of the given InternalEntry
   static OpType EntryOpType(const char* internal_entry);
 
-  // Retuen the key of the given InternalEntry by Sequence
-  static Sequence* EntryKey(const char* internal_entry);
+  // Return the key of the given InternalEntry by Sequence
+  static Sequence EntryKey(const char* internal_entry);
 
-  // Retuen the key of the given InternalEntry by Sequence
-  static Sequence* EntryValue(const char* internal_entry);
+  // Return the key of the given InternalEntry by Sequence
+  // ASSERT: the value exists
+  static Sequence EntryValue(const char* internal_entry);
+
+  // Return Sequence-represent internal entry data
+  static Sequence EntryData(const char* internal_entry);
 
  private:
   InternalEntry() = delete;

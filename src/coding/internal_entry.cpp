@@ -43,17 +43,31 @@ InternalEntry::OpType InternalEntry::EntryOpType(const char* internal_entry) {
   return kDelete;
 }
 
-Sequence* InternalEntry::EntryKey(const char* internal_entry) {
+Sequence InternalEntry::EntryKey(const char* internal_entry) {
   uint64_t size = coding::DecodeVarint64(internal_entry);
 
-  return new Sequence(internal_entry + coding::SizeOfVarint(internal_entry),
-                      size);
+  return Sequence(internal_entry + coding::SizeOfVarint(internal_entry), size);
 }
 
-Sequence* InternalEntry::EntryValue(const char* internal_entry) {
+Sequence InternalEntry::EntryValue(const char* internal_entry) {
   uint64_t size = coding::DecodeVarint64(internal_entry);
   internal_entry += coding::SizeOfVarint(size) + size + 9;
 
-  return new Sequence(internal_entry + coding::SizeOfVarint(internal_entry),
-                      coding::DecodeVarint64(internal_entry));
+  return Sequence(internal_entry + coding::SizeOfVarint(internal_entry),
+                  coding::DecodeVarint64(internal_entry));
+}
+
+Sequence InternalEntry::EntryData(const char* internal_entry) {
+  const char* data = internal_entry;
+  uint64_t size = coding::DecodeVarint64(internal_entry);
+  uint64_t before_value_size = coding::SizeOfVarint(size) + size + 9;
+  if (EntryOpType(data) == OpType::kDelete) {
+    // There is no value
+    return Sequence(data, before_value_size);
+  }
+
+  internal_entry += before_value_size;
+  size = before_value_size + coding::SizeOfVarint(internal_entry) +
+         coding::DecodeVarint64(internal_entry);
+  return Sequence(data, size);
 }
