@@ -70,3 +70,50 @@ void ThreadPool::BackgroundThreadTask() {
     // cv_.notify_all();
   }
 }
+
+TCThreadPool::TCThreadPool() : TCThreadPool(0, 0) {}
+
+TCThreadPool::TCThreadPool(const int default_core_thread_num,
+                           const int max_task_queue_size)
+    : kDefaultCoreThreadNum(default_core_thread_num),
+      kMaxTaskQueueSize(max_task_queue_size),
+      is_thread_pool_running_(false) {}
+
+TCThreadPool::~TCThreadPool() {}
+
+void TCThreadPool::Start() {
+  std::unique_lock<std::mutex> lock(mtx_);
+
+  // while (task_queue_.empty()) {
+  //   cv_.wait(lock);
+  // }
+
+  while (thread_queue_.size() < kDefaultCoreThreadNum) {
+    std::cout << "Constructing new background thread task ...\n";
+    thread_queue_.emplace_back(
+        std::thread(&TCThreadPool::BackgroundThreadTask, this));
+    thread_queue_.back().detach();
+  }
+
+  cv_.notify_all();
+}
+
+void TCThreadPool::BackgroundThreadTask() {
+  std::cout << "Executing background thread task ...\n";
+
+  // while (!is_thread_pool_running_.load()) {
+  while (true) {
+    std::unique_lock<std::mutex> lock(mtx_);
+    while (task_queue_.empty()) {
+      cv_.wait(lock);
+    }
+
+    std::function<void()> task;
+
+    if (task_queue_.Dequeue(task)) {
+      task();
+    }
+  }
+
+  std::cout << "Killed a background thread ...\n";
+}

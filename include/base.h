@@ -3,12 +3,15 @@
 #ifndef NEKO_BASE_H_
 #define NEKO_BASE_H_
 
-#include <stdint.h>  // For uint_t
-#include <cassert>   // For assert
-#include <cstring>   // For std::memcpy
-#include <mutex>     // For concurrency control
-#include <vector>
+#include <stdint.h>   // For uint_t
+#include <algorithm>  // For std::remove
+#include <cassert>    // For assert
+#include <cstring>    // For std::memcpy
 #include <memory>
+#include <mutex>  // For concurrency control
+#include <queue>
+#include <vector>
+#include <thread>
 
 // typedef unsigned long U_LONG;
 using U_LONG = unsigned long;

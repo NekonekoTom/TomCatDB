@@ -51,15 +51,15 @@ class BaseWriter {
   DBFile* dbfile_ = nullptr;
 };
 
-class BatchWriter : private BaseWriter {
+class SequentialWriter : private BaseWriter {
  public:
-  BatchWriter() = default;
-  explicit BatchWriter(DBFile* dbf_ptr, const int max_buffer_size = 1024);
+  SequentialWriter() = default;
+  explicit SequentialWriter(DBFile* dbf_ptr, const int max_buffer_size = 1024);
 
-  BatchWriter(const BatchWriter&) = delete;
-  BatchWriter& operator=(const BatchWriter&) = delete;
+  SequentialWriter(const SequentialWriter&) = delete;
+  SequentialWriter& operator=(const SequentialWriter&) = delete;
 
-  ~BatchWriter() = default;
+  ~SequentialWriter() = default;
 
   // Write a Sequence batch to DBFile, call the second WriteBatch below
   Status WriteBatch(const std::vector<Sequence>& entries);
@@ -73,9 +73,13 @@ class BatchWriter : private BaseWriter {
   // Write a const char* batch to DBFile, call WriteBatch()(Sequence version)
   Status WriteBatch(const std::vector<const char*>& entries);
 
-  // Convenient function for the purpose of reusing BatchWriter object
+  // Convenient function for the purpose of reusing SequentialWriter object
   // to quickly write a short char sequence.
   Status WriteFragment(const char* fragment, int fragment_size);
+
+  Status WriteFragment(const std::string& fragment) {
+    return WriteFragment(fragment.c_str(), fragment.size());
+  }
 
  private:
   // TODO: Any data members? Use static functions instead?

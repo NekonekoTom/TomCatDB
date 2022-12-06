@@ -16,12 +16,4 @@ std::vector<std::string> Split(const std::string& str, const char seperator) {
   return ret;
 }
 
-std::string PathJoin(const std::string& parent, const std::string& child) {
-  // TODO: Check legality?
-  if (parent.back() == '/')
-    return parent.substr(0, parent.size() - 1) + "/" + child;
-  else
-    return parent + "/" + child;
-}
-
 } // namespace neko_base

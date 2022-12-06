@@ -31,7 +31,7 @@ class ManifestFormat : public FileFormat {
   ManifestFormat& operator=(const ManifestFormat&) = delete;
   ~ManifestFormat() = default;
 
-  // Decode std::string to ManifestData
+  // Decode std::string to ManifestData. DO NOT check legality.
   static ManifestData Decode(const std::string& manifest);
 
   // TODO
@@ -56,18 +56,12 @@ class LogFormat : public FileFormat {
 
 class DataFileFormat : public FileFormat {
  public:
-  struct Header {
-    // uint32_t file_size;
-    uint32_t index_blk_offset;
-    uint32_t flexible_blk_offset;
-  };
-
   struct DataBlock {
     ;
   };
 
   struct IndexBlock {
-    uint32_t data_blk_size;
+    uint32_t data_blk_count;
     uint32_t* data_blk_offset;
   };
 
@@ -76,11 +70,43 @@ class DataFileFormat : public FileFormat {
     uint32_t crc;
   };
 
-  static const int kSSTHeaderSize = 8;
+  struct Footer {
+    Footer() = default;
+    explicit Footer(const char* footer_str) {
+      min_key_size = *reinterpret_cast<const uint32_t*>(footer_str);
+      max_key_offset = *reinterpret_cast<const uint32_t*>(footer_str + 4);
+      max_key_size = *reinterpret_cast<const uint32_t*>(footer_str + 8);
+      data_blk_size = *reinterpret_cast<const uint32_t*>(footer_str + 12);
+      index_blk_size = *reinterpret_cast<const uint32_t*>(footer_str + 16);
+      flexible_blk_size = *reinterpret_cast<const uint32_t*>(footer_str + 20);
+    }
+    Footer(const uint32_t minks, const uint32_t maxko, const uint32_t maxks,
+           const uint32_t dbs, const uint32_t ibs, const uint32_t fbs)
+        : min_key_size(minks),
+          max_key_offset(maxko),
+          max_key_size(maxks),
+          data_blk_size(dbs),
+          index_blk_size(ibs),
+          flexible_blk_size(fbs) {}
 
+    // uint32_t min_key_offset = 0;
+    uint32_t min_key_size;
+    uint32_t max_key_offset;
+    uint32_t max_key_size;
+    uint32_t data_blk_size;
+    uint32_t index_blk_size;
+    uint32_t flexible_blk_size;
+  };
+
+  static const int kSSTFooterSize = 6 * sizeof(uint32_t);
+
+  // When the current data block size > kDefaultDataBlkSize, the writer
+  // writes the current data block into the SST file at once.
+  // The real size of a data block can be calculated by the start address
+  // of the next block minus the start address of the current block.
   static const int kDefaultDataBlkSize = 4096;
 
-  static const int kApproximateSSTFileSize = 2 << 21;
+  static const int kApproximateSSTFileSize = 1 << 21;
 
   DataFileFormat() = delete;
   DataFileFormat(const DataFileFormat&) = delete;

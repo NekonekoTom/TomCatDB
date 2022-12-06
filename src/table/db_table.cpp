@@ -1,11 +1,13 @@
 #include "db_table.h"
 
-TCTable::TCTable(RAIILock& lock, const int default_size)
-    : kDefaultMaxTCTableSize(default_size),
-      table_(new InternalEntryComparator,
-             new char),  // Waste 1 byte here, will never delete.
-      mem_allocator_(new MemAllocator),
-      table_lock_(lock) {}
+TCTable::TCTable(RAIILock& lock,
+                 const std::shared_ptr<InternalEntryComparator>& comparator,
+                 const uint64_t first_entry_id)
+    : table_(comparator, new char),  // Waste 1 byte here, will never delete.
+      mem_allocator_(new MemAllocator()),
+      query_allocator_(new MemAllocator()),
+      table_lock_(lock),
+      entry_id_(first_entry_id) {}
 
 TCTable::~TCTable() {
   if (mem_allocator_ != nullptr)
@@ -15,8 +17,9 @@ TCTable::~TCTable() {
 const Sequence TCTable::Get(const Sequence& key) const {
   uint64_t entry_size = coding::SizeOfVarint(key.size()) + key.size() + 9;
 
+  // char* internal_entry = new char[entry_size];  // Should be deleted
   table_lock_.Lock();
-  char* internal_entry = mem_allocator_->Allocate(entry_size);
+  char* internal_entry = query_allocator_->Allocate(entry_size);
   table_lock_.Unlock();
 
   // The value, ID, and op_type are invalid
@@ -31,13 +34,16 @@ const Sequence TCTable::Get(const Sequence& key) const {
     table_lock_.Unlock();
 
     if (the_node != nullptr) {
-      if (InternalEntry::EntryOpType(the_node->key_) == InternalEntry::kInsert) {
+      if (InternalEntry::EntryOpType(the_node->key_) ==
+          InternalEntry::kInsert) {
         // return new Sequence(the_node->key_, 0);
+        // delete internal_entry;  // Delete internal_entry
         return InternalEntry::EntryValue(the_node->key_);
       }
     }
   }
 
+  // delete internal_entry;  // Delete internal_entry
   return Sequence();
 }
 
@@ -87,7 +93,8 @@ bool TCTable::ContainsKey(const Sequence& key) const {
   uint64_t entry_size = coding::SizeOfVarint(key.size()) + key.size() + 9;
 
   table_lock_.Lock();
-  char* internal_entry = mem_allocator_->Allocate(entry_size);
+  // char* internal_entry = mem_allocator_->Allocate(entry_size);
+  char* internal_entry = query_allocator_->Allocate(entry_size);
   table_lock_.Unlock();
 
   // The value, ID, and op_type are invalid

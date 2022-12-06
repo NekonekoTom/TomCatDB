@@ -11,7 +11,9 @@ BaseWriter::BaseWriter(DBFile* dbf_ptr, const int max_buffer_size)
 const int BaseWriter::AppendToBuffer(const char* src, const int size) {
   if (!AbleToBuffer(size)) {
     std::memcpy(buffer_ + pos_, src, kMaxBufferSize - pos_);
-    return kMaxBufferSize - pos_;
+    auto ret = kMaxBufferSize - pos_;
+    pos_ = kMaxBufferSize;
+    return ret;
   }
 
   std::memcpy(buffer_ + pos_, src, size);
@@ -20,16 +22,17 @@ const int BaseWriter::AppendToBuffer(const char* src, const int size) {
 }
 
 const int BaseWriter::AppendToBuffer(const Sequence& seq) {
-  if (!AbleToBuffer(seq.size())) {
-    std::memcpy(buffer_ + pos_, seq.data(), kMaxBufferSize - pos_);
-    auto ret = kMaxBufferSize - pos_;
-    pos_ = kMaxBufferSize;
-    return ret;
-  }
+  // if (!AbleToBuffer(seq.size())) {
+  //   std::memcpy(buffer_ + pos_, seq.data(), kMaxBufferSize - pos_);
+  //   auto ret = kMaxBufferSize - pos_;
+  //   pos_ = kMaxBufferSize;
+  //   return ret;
+  // }
 
-  std::memcpy(buffer_ + pos_, seq.data(), seq.size());
-  pos_ += seq.size();
-  return seq.size();
+  // std::memcpy(buffer_ + pos_, seq.data(), seq.size());
+  // pos_ += seq.size();
+  // return seq.size();
+  return AppendToBuffer(seq.data(), seq.size());
 }
 
 Status BaseWriter::WriteNewFile() {
@@ -101,28 +104,28 @@ BaseWriter::~BaseWriter() {
   }
 }
 
-BatchWriter::BatchWriter(DBFile* dbf_ptr, const int max_buffer_size)
+SequentialWriter::SequentialWriter(DBFile* dbf_ptr, const int max_buffer_size)
     : BaseWriter(dbf_ptr, max_buffer_size) {}
 
-Status BatchWriter::WriteBatch(const std::vector<Sequence>& entries) {
+Status SequentialWriter::WriteBatch(const std::vector<Sequence>& entries) {
   return WriteBatch(entries, 0, entries.size());
 }
 
-Status BatchWriter::WriteBatch(const std::vector<Sequence>& entries,
-                               std::vector<Sequence>::size_type begin,
-                               std::vector<Sequence>::size_type end) {
+Status SequentialWriter::WriteBatch(const std::vector<Sequence>& entries,
+                                    std::vector<Sequence>::size_type begin,
+                                    std::vector<Sequence>::size_type end) {
   int buffered_bytes = 0;
   Status ret;
   Sequence e;  // Iteration variable
   for (auto i = begin; i < end; ++i) {
     e = entries[i];
     buffered_bytes = AppendToBuffer(e);
-    while (buffered_bytes != entries[i].size()) {
+    while (buffered_bytes != e.size()) {
       e.SkipPrefix(buffered_bytes);
       if (!(ret = WriteAppendFile()).StatusNoError()) {
         return ret;
       }
-      buffered_bytes = AppendToBuffer(entries[i]);
+      buffered_bytes = AppendToBuffer(e);
     }
   }
 
@@ -133,7 +136,7 @@ Status BatchWriter::WriteBatch(const std::vector<Sequence>& entries,
   return ret;
 }
 
-Status BatchWriter::WriteBatch(const std::vector<const char*>& entries) {
+Status SequentialWriter::WriteBatch(const std::vector<const char*>& entries) {
   std::vector<Sequence> seq_entries;
   for (const char* e : entries) {
     seq_entries.push_back(InternalEntry::EntryData(e));
@@ -141,7 +144,8 @@ Status BatchWriter::WriteBatch(const std::vector<const char*>& entries) {
   return WriteBatch(seq_entries);
 }
 
-Status BatchWriter::WriteFragment(const char* fragment, int fragment_size) {
+Status SequentialWriter::WriteFragment(const char* fragment,
+                                       int fragment_size) {
   Status ret;
   int buffered_bytes = 0;
   ClearBuffer();

@@ -34,10 +34,15 @@ class BaseReader {
   //          calls lseek(file->fd(), offset, SEEK_SET)
   virtual Status Read(DBFile* file, std::string& ret, const uint64_t size,
                       const ::ssize_t offset) = 0;
-  
 
   // Read all contents from the file and store them in std::string
   virtual Status ReadEntire(DBFile* file, std::string& ret) = 0;
+
+  // Return the file size of the specific file
+  static inline const ::ssize_t FlieSize(const char* file_name) {
+    struct stat file_stat;
+    return !stat(file_name, &file_stat) ? file_stat.st_size : -1;
+  }
 
  protected:
   // Calling this function will possibly try to open or re-open the DBFile.

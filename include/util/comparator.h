@@ -1,8 +1,8 @@
 #ifndef COMPARATOR_H_
 #define COMPARATOR_H_
 
-#include "sequence.h"
 #include "internal_entry.h"
+#include "sequence.h"
 
 // Comparator for comparing Sequence objects
 template <typename T>
@@ -25,7 +25,7 @@ class Comparator {
 
   // Return true if first param < second param
   virtual bool Less(const T&, const T&) const = 0;
-  
+
   // Return true if first param == second param
   virtual bool Equal(const T&, const T&) const = 0;
 
@@ -80,14 +80,50 @@ class InternalEntryComparator : public Comparator<const char*> {
 
   ~InternalEntryComparator() = default;
 
-  bool GreaterOrEquals(const char* const &, const char* const &) const;
-  bool LessOrEquals(const char* const &, const char* const &) const;
-  bool Greater(const char* const &, const char* const &) const;
-  bool Less(const char* const &, const char* const &) const;
-  bool Equal(const char* const &, const char* const &) const;
+  bool GreaterOrEquals(const char* const&, const char* const&) const;
+  bool LessOrEquals(const char* const&, const char* const&) const;
+  bool Greater(const char* const&, const char* const&) const;
+  bool Less(const char* const&, const char* const&) const;
+  bool Equal(const char* const&, const char* const&) const;
+
+  bool GreaterOrEquals(const std::string& x, const std::string& y) const {
+    return GreaterOrEquals(x.c_str(), y.c_str());
+  }
+  bool LessOrEquals(const std::string& x, const std::string& y) const {
+    return LessOrEquals(x.c_str(), y.c_str());
+  }
+  bool Greater(const std::string& x, const std::string& y) const {
+    return Greater(x.c_str(), y.c_str());
+  }
+  bool Less(const std::string& x, const std::string& y) const {
+    return Less(x.c_str(), y.c_str());
+  }
+  bool Equal(const std::string& x, const std::string& y) const {
+    return Equal(x.c_str(), y.c_str());
+  }
+
+  // Functor for std::priority_queue
+  bool operator()(const Sequence& x, const Sequence& y) {
+    return Greater(x.data(), y.data());
+  }
 
  private:
   // TODO: Any data members? Use static functions instead?
+};
+
+class MergeComparator : public InternalEntryComparator {
+ public:
+  // Functor for std::priority_queue
+  bool operator()(const std::pair<Sequence, int>& x,
+                  const std::pair<Sequence, int>& y) {
+    return Greater(x.first.data(), y.first.data());
+  }
+
+  // Functor for std::priority_queue
+  bool operator()(const std::tuple<Sequence, int, int>& x,
+                  const std::tuple<Sequence, int, int>& y) {
+    return Greater(std::get<0>(x).data(), std::get<0>(y).data());
+  }
 };
 
 #endif

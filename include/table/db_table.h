@@ -12,13 +12,10 @@
 // The TCTable is guaranteed to be thread-safe
 class TCTable {
  public:
-  // Max TCTable size. When the capacity reaches the limit,
-  // the TCTable will be transferred to an immutable table
-  // and written to level 0 sst file for persistence.
-  const int kDefaultMaxTCTableSize;
-
   TCTable() = delete;
-  TCTable(RAIILock& lock, const int default_size = 1 << 12);
+  TCTable(RAIILock& lock,
+          const std::shared_ptr<InternalEntryComparator>& comparator,
+          const uint64_t first_entry_id);
 
   TCTable(const TCTable&) = delete;
   TCTable& operator=(const TCTable&) = delete;
@@ -37,6 +34,11 @@ class TCTable {
   // Return read-only entry set for deserialization
   const std::vector<const char*> EntrySet() const { return table_.EntrySet(); }
 
+  // Return current memory usage of the TCTable
+  const uint32_t MemUsage() const { return mem_allocator_->MemUsage(); }
+
+  const uint64_t GetNextEntryID() const { return entry_id_; }
+
  private:
   // Stores char pointers only, the actual resources are managed by mem_allocator_
   SkipList<const char*, InternalEntryComparator> table_;
@@ -44,7 +46,10 @@ class TCTable {
   // Responsible for allocating and managing the data resources
   MemAllocator* const mem_allocator_;
 
-  uint64_t entry_id_ = 0;
+  // Responsible for allocating and managing the data resources FOR QUERY
+  MemAllocator* const query_allocator_;
+
+  uint64_t entry_id_ = 0;  // TODO: The entry_id_ should be globally unique
 
   RAIILock& table_lock_;
 };

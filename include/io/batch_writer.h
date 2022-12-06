@@ -6,18 +6,18 @@
 #include "sequence.h"
 #include "writer.h"
 
-class BatchWriter : public BaseWriter {
+class SequentialWriter : public BaseWriter {
  public:
-  BatchWriter() = delete;
-  // explicit BatchWriter(DBFile* dbf_ptr, const int max_buffer_size = 1024, Sequence* seq = nullptr)
+  SequentialWriter() = delete;
+  // explicit SequentialWriter(DBFile* dbf_ptr, const int max_buffer_size = 1024, Sequence* seq = nullptr)
   //     : seq_(seq), BaseWriter(dbf_ptr, max_buffer_size) {}
-  explicit BatchWriter(DBFile* dbf_ptr, Sequence* seq = nullptr,
+  explicit SequentialWriter(DBFile* dbf_ptr, Sequence* seq = nullptr,
                        const int max_buffer_size = 1024);
 
-  BatchWriter(const BatchWriter&) = delete;
-  BatchWriter& operator=(const BatchWriter&) = delete;
+  SequentialWriter(const SequentialWriter&) = delete;
+  SequentialWriter& operator=(const SequentialWriter&) = delete;
 
-  ~BatchWriter();
+  ~SequentialWriter();
 
   // Delete
   const int AppendToBuffer(const Sequence* seq) { return 0; }
@@ -30,7 +30,7 @@ class BatchWriter : public BaseWriter {
   Sequence* seq_;
 };
 
-BatchWriter::BatchWriter(DBFile* dbf_ptr, Sequence* seq,
+SequentialWriter::SequentialWriter(DBFile* dbf_ptr, Sequence* seq,
                          const int max_buffer_size)
     : seq_(seq), BaseWriter(dbf_ptr, max_buffer_size) {
   const char* data = seq_->data();
@@ -43,6 +43,6 @@ BatchWriter::BatchWriter(DBFile* dbf_ptr, Sequence* seq,
   AppendToBuffer(data, size);
 }
 
-BatchWriter::~BatchWriter() {}
+SequentialWriter::~SequentialWriter() {}
 
 #endif

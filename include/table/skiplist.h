@@ -32,7 +32,7 @@ struct SkipListNode {
 template <typename K, class Cmp = Comparator<int>>
 class SkipList {
  public:
-  explicit SkipList(const Cmp*, const K& last_key);
+  SkipList(const std::shared_ptr<Cmp>&, const K& last_key);
 
   SkipList(const SkipList&) = delete;
   SkipList& operator=(const SkipList&) = delete;
@@ -104,11 +104,11 @@ class SkipList {
   // SkipListNode<K>* last_node_[];
   SkipListNode<K>** last_node_;
 
-  const Cmp* comparator_;
+  const std::shared_ptr<Cmp>& comparator_;
 };
 
 template <typename K, class Cmp>
-SkipList<K, Cmp>::SkipList(const Cmp* comparator, const K& last_key)
+SkipList<K, Cmp>::SkipList(const std::shared_ptr<Cmp>& comparator, const K& last_key)
     : size_(0), levels_(0), comparator_(comparator) {
 
   // // K must have default constructor
@@ -134,9 +134,6 @@ SkipList<K, Cmp>::~SkipList() {
   }
   if (last_node_ != nullptr) {
     delete[] last_node_;
-  }
-  if (comparator_ != nullptr) {
-    delete comparator_;
   }
 }
 
