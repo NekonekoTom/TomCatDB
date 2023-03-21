@@ -8,6 +8,7 @@
 #include "base.h"
 #include "raii_lock.h"
 
+// Deprecated
 // Usage:
 // Any tasks which will be submitted to the ThreadPool must be packaged
 // in a class inherits the ThreadTask and implements the method ExecuteTask().
@@ -16,6 +17,7 @@ class ThreadTask {
   virtual void ExecuteTask() = 0;
 };
 
+// Deprecated
 class ThreadPool {
  public:
   ThreadPool();
@@ -122,7 +124,12 @@ class TCThreadPool {
     return task_ptr->get_future();
   }
 
+  // Start the thread pool. Core threads are constructed and stored in queue.
   void Start();
+
+  // Stop the thread pool. Resources will be reclaimed after all thread tasks
+  // are done.
+  void Shutdown();
 
  private:
   const int kDefaultCoreThreadNum;
@@ -134,7 +141,6 @@ class TCThreadPool {
   std::deque<std::thread> thread_queue_;
   std::mutex mtx_;
   std::condition_variable cv_;
-  std::thread main_thread_;
   std::atomic<bool> is_thread_pool_running_;
 };
 

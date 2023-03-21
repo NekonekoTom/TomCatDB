@@ -33,6 +33,7 @@ int main() {
   //   std::cout << "Computing...\n";
   //   std::this_thread::sleep_for(std::chrono::milliseconds(200));
   //   std::cout << "Done...\n";
+  //   return x + y;
   // };
 
   // thread_pool.SubmitTask(job, 1, 2);
@@ -44,6 +45,13 @@ int main() {
   // thread_pool.SubmitTask(job, 1, 2);
   // thread_pool.SubmitTask(job, 1, 2);
   // thread_pool.SubmitTask(job, 1, 2);
+  // std::this_thread::sleep_for(std::chrono::seconds(5));
+  // auto i_want_x_plus_y = thread_pool.SubmitTask(job, 1, 2);
+
+  // auto res_x_y = i_want_x_plus_y.get();
+  // std::cout << "Got result: " << res_x_y << std::endl;
+
+  // thread_pool.Shutdown();
 
   // Status ret(Status::NoError());
   int records = 20000;

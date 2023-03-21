@@ -79,17 +79,17 @@ TCThreadPool::TCThreadPool(const int default_core_thread_num,
       kMaxTaskQueueSize(max_task_queue_size),
       is_thread_pool_running_(false) {}
 
-TCThreadPool::~TCThreadPool() {}
+TCThreadPool::~TCThreadPool() {
+  Shutdown();
+}
 
 void TCThreadPool::Start() {
   std::unique_lock<std::mutex> lock(mtx_);
 
-  // while (task_queue_.empty()) {
-  //   cv_.wait(lock);
-  // }
+  // Set flag
+  is_thread_pool_running_.store(true);
 
   while (thread_queue_.size() < kDefaultCoreThreadNum) {
-    std::cout << "Constructing new background thread task ...\n";
     thread_queue_.emplace_back(
         std::thread(&TCThreadPool::BackgroundThreadTask, this));
     thread_queue_.back().detach();
@@ -98,13 +98,18 @@ void TCThreadPool::Start() {
   cv_.notify_all();
 }
 
-void TCThreadPool::BackgroundThreadTask() {
-  std::cout << "Executing background thread task ...\n";
+void TCThreadPool::Shutdown() {
+  // Reset flag
+  is_thread_pool_running_.store(false);
 
-  // while (!is_thread_pool_running_.load()) {
-  while (true) {
+  // Wake up all threads
+  cv_.notify_all();
+}
+
+void TCThreadPool::BackgroundThreadTask() {
+  while (is_thread_pool_running_.load()) {
     std::unique_lock<std::mutex> lock(mtx_);
-    while (task_queue_.empty()) {
+    while (is_thread_pool_running_.load() && task_queue_.empty()) {
       cv_.wait(lock);
     }
 
@@ -114,6 +119,4 @@ void TCThreadPool::BackgroundThreadTask() {
       task();
     }
   }
-
-  std::cout << "Killed a background thread ...\n";
 }
