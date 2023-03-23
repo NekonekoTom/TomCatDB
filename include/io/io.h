@@ -1,5 +1,6 @@
 #include "db_table.h"
 #include "format.h"
+#include "logger.h"
 #include "reader.h"
 #include "tools.h"
 #include "writer.h"
@@ -8,8 +9,6 @@
 // A set of Writers is managed by the manager for reuse of writers
 class TCIO {
  public:
-  //   const int kDefaultLevel0FileNum;
-
   const int kDefaultReaderBufferSize = 4096;
 
   // kDefaultWriterBufferSize is for SequentialWriter that writes data blocks into
@@ -51,7 +50,7 @@ class TCIO {
 
   // Interface for MultiwayMerge().
   Status WriteMergeSSTFile(
-      const std::vector<std::tuple<Sequence, int, int>>& entry_set,
+      const std::vector<std::tuple<Sequence, int, int>>& item_set,
       std::string& file_basename,
       std::shared_ptr<MemAllocator>& merge_allocator);
 
@@ -64,10 +63,13 @@ class TCIO {
   //                       the number of it in its level;
   //   new_files: vector of std::string, basename only;
   //   current_level: the lowest level among the compact files.
+  //   insert_index: new files will be inserted on the insert_index. Files
+  //                 smaller than the new files are at [0, insert_index).
   Status UpdateManifest(
       ManifestFormat::ManifestData& old_manifest,
       const std::vector<std::pair<int, int>>& compact_file_index,
-      const std::vector<std::string>& new_files, const int current_level);
+      const std::vector<std::string>& new_files, const int current_level,
+      const int insert_index);
 
   // Read MANIFEST file at kDatabaseDir/kManifestFilename
   Status ReadManifest(ManifestFormat::ManifestData& read_status);
@@ -83,7 +85,7 @@ class TCIO {
 
   // Read the IndexBlock of the SST file and store it in the memory
   Status ReadSSTIndex(const std::string& file_abs_path,
-                      DataFileFormat::Footer& footer_content,
+                      const DataFileFormat::Footer& footer_content,
                       std::vector<uint32_t>& data_blk_offset);
 
   Status ReadSSTDataBlock(const std::string& file_abs_path,
@@ -94,6 +96,8 @@ class TCIO {
 
   // TODO: Argument?
   // Status WriteSSTFile(const std::vector<const char*> entry_set);
+
+  Status Log(const std::string& msg) { return logger_->Debug(msg); }
 
  private:
   // Build log and manifest metadata file
@@ -135,13 +139,11 @@ class TCIO {
   Status WriteSSTFileFooter(std::shared_ptr<SequentialWriter>& sw_ptr,
                             const DataFileFormat::Footer& footer);
 
-  std::vector<std::vector<DBFile*>> table_files_;
-
   // Reader workers for sequential reading
   // std::vector<SequentialReader*> readers_;
   std::vector<std::shared_ptr<SequentialReader>> readers_;
 
-  std::shared_ptr<SequentialWriter> log_writer;
+  std::shared_ptr<TCLogger> logger_;
 
   int file_levels_ = 0;
 

@@ -24,6 +24,8 @@ class TCTable {
 
   const Sequence Get(const Sequence& key) const;
 
+  const Sequence Get(const char* internal_entry) const;
+
   Status Insert(const Sequence& key, const Sequence& value);
 
   Status Delete(const Sequence& key);

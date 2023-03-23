@@ -49,6 +49,24 @@ void Remove(std::vector<T>& src,
   return;
 }
 
+// Re-arrange data_files at specific level.
+// First, clean files at specific level according to boundary. The
+// files are ordered after cleaning. Second, insert new SST files into the
+// given manifest.
+// Param:
+//   data_files: data_files at the level;
+//   boundary: the first element denotes the first element in the data_files
+//             to be removed, the second denotes the next position of the last
+//             one to be removed.
+//   new_files: vector of std::string, basename only;
+//   level: the level
+//   insert_index: new files will be inserted on the insert_index. Files
+//                 smaller than the new files are at [0, insert_index).
+bool RearrangeFilesInManifest(std::vector<std::string>& data_files,
+                              const std::pair<int, int> boundary,
+                              const std::vector<std::string>& new_files,
+                              const int level);
+
 }  // namespace neko_base
 
 #endif

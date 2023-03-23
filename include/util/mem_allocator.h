@@ -17,13 +17,13 @@ class MemAllocator {
   // // The leftover space will be discarded and a fresh new block will be allocated
   // const int kMaxAllocFailTimes = 4;
 
-  MemAllocator() : kMaxSectorSize(kDefaultBlockSize / 4) {
+  MemAllocator() : kMaxSectorSize(kDefaultBlockSize / 2) {
     start_addr_ = AllocateFullBlock(kDefaultBlockSize);
   }
 
   explicit MemAllocator(const uint64_t default_block_size)
       : kDefaultBlockSize(default_block_size),
-        kMaxSectorSize(kDefaultBlockSize / 4) {
+        kMaxSectorSize(kDefaultBlockSize / 2) {
     start_addr_ = AllocateFullBlock(kDefaultBlockSize);
   }
 
@@ -95,6 +95,20 @@ class MergeAllocator : public MemAllocator {
   // // Record the size of each block. This property is designed to calculate which
   // // block a char* ptr (start address of a Sequence) belongs to.
   // std::vector<uint64_t> block_size;
+};
+
+class QueryAllocator : public MemAllocator {
+ public:
+  QueryAllocator() : MemAllocator(0) {}  // Same as MergeAllocator
+  explicit QueryAllocator(const uint64_t default_block_size)
+      : MemAllocator(default_block_size) {}
+
+  QueryAllocator(const QueryAllocator&) = delete;
+  QueryAllocator& operator=(const QueryAllocator&) = delete;
+
+  virtual ~QueryAllocator() {}
+
+  char* Allocate(const uint64_t size) { return MemAllocator::Allocate(size); }
 };
 
 #endif

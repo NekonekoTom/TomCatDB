@@ -94,19 +94,6 @@ bool InternalEntryComparator::GreaterOrEquals(const char* const& first,
     ++second_key_data;
   }
 
-  // if (first_key_size <= 0 && second_key_size <= 0) {
-  //   // If the first and second param have the same key, then:
-  //   // Condition 1: OpType(first) > OpType(second)
-  //   // Condition 2: ID(first) >= ID(second)
-  //   return *first_key_data > *second_key_data ||
-  //          *reinterpret_cast<const uint64_t*>(first_key_data + 1) >= 
-  //              *reinterpret_cast<const uint64_t*>(second_key_data + 1);
-  // } else if (second_key_size <= 0) {
-  //   return true;
-  // } else if (first_key_size > 0) {
-  //   return *first_key_data >= *second_key_data;
-  // }
-
   if (first_key_size <= 0 && second_key_size <= 0) {
     // If the first and second param have the same key, then:
     // Condition: ID(first) >= ID(second)
@@ -138,20 +125,7 @@ bool InternalEntryComparator::LessOrEquals(const char* const& first,
     ++first_key_data;
     ++second_key_data;
   }
-
-  // if (first_key_size <= 0 && second_key_size <= 0) {
-  //   // If the first and second param have the same key, then:
-  //   // Condition 1: OpType(first) < OpType(second)
-  //   // Condition 2: ID(first) <= ID(second)
-  //   return *first_key_data < *second_key_data ||
-  //          *reinterpret_cast<const uint64_t*>(first_key_data + 1) <=
-  //              *reinterpret_cast<const uint64_t*>(second_key_data + 1);
-  // } else if (first_key_size <= 0) {
-  //   return true;
-  // } else if (second_key_size > 0) {
-  //   return *first_key_data <= *second_key_data;
-  // }
-
+  
   if (first_key_size <= 0 && second_key_size <= 0) {
     // If the first and second param have the same key, then:
     // Condition: ID(first) <= ID(second)
@@ -197,3 +171,95 @@ bool InternalEntryComparator::Equal(const char* const& first,
 
   return (first_key_size == second_key_size) && (first_key_size == 0);
 }
+
+bool QueryComparator::GreaterOrEquals(const char* const& first,
+                                             const char* const& second) const {
+  if (*first == 0) return true;
+  if (*second == 0) return false;
+
+  auto first_key_size = coding::DecodeVarint64(first);
+  auto second_key_size = coding::DecodeVarint64(second);
+
+  const char* first_key_data = first + coding::SizeOfVarint(first);
+  const char* second_key_data = second + coding::SizeOfVarint(second);
+
+  while (first_key_size > 0 && second_key_size > 0 && *first_key_data == *second_key_data) {
+    --first_key_size;
+    --second_key_size;
+    ++first_key_data;
+    ++second_key_data;
+  }
+
+  if (second_key_size == 0) {
+    return true;
+  } else if (first_key_size == 0) {
+    return false;
+  } else {
+    return *first_key_data >= *second_key_data;
+  }
+}
+
+bool QueryComparator::LessOrEquals(const char* const& first,
+                                          const char* const& second) const {
+  if (*first == 0) return true;
+  if (*second == 0) return false;
+
+  auto first_key_size = coding::DecodeVarint64(first);
+  auto second_key_size = coding::DecodeVarint64(second);
+
+  const char* first_key_data = first + coding::SizeOfVarint(first);
+  const char* second_key_data = second + coding::SizeOfVarint(second);
+
+  while (first_key_size > 0 && second_key_size > 0 && *first_key_data == *second_key_data) {
+    --first_key_size;
+    --second_key_size;
+    ++first_key_data;
+    ++second_key_data;
+  }
+
+  // if (first_key_size == 0 && second_key_size >= 0) {
+  //   return true;
+  // }
+
+  // return false;
+
+  if (first_key_size == 0) {
+    return true;
+  } else if (second_key_size == 0) {
+    return false;
+  } else {
+    return *first_key_data <= *second_key_data;
+  }
+}
+
+// bool QueryComparator::Greater(const char* const& first,
+//                                       const char* const& second) const {
+//   return !LessOrEquals(first, second);
+// }
+
+// bool QueryComparator::Less(const char* const& first,
+//                                    const char* const& second) const {
+//   return !GreaterOrEquals(first, second);
+// }
+
+// bool QueryComparator::Equal(const char* const& first,
+//                                     const char* const& second) const {
+//   if (*first == 0 || *second == 0) {
+//     return *first == *second;
+//   }
+
+//   auto first_key_size = coding::DecodeVarint64(first);
+//   auto second_key_size = coding::DecodeVarint64(second);
+
+//   const char* first_key_data = first + coding::SizeOfVarint(first);
+//   const char* second_key_data = second + coding::SizeOfVarint(second);
+
+//   while (first_key_size > 0 && second_key_size > 0 && *first_key_data == *second_key_data) {
+//     --first_key_size;
+//     --second_key_size;
+//     ++first_key_data;
+//     ++second_key_data;
+//   }
+
+//   return (first_key_size == second_key_size) && (first_key_size == 0);
+// }

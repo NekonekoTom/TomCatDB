@@ -1,7 +1,9 @@
+#include "cache.h"
 #include "config.h"
 #include "db_table.h"
 #include "io.h"
 #include "raii_lock.h"
+#include "thread_pool.h"
 #include "writer.h"
 
 class TCDB {
@@ -35,13 +37,15 @@ class TCDB {
 
   ~TCDB();
 
-  const Sequence Get(const Sequence& key);
+  std::string Get(const Sequence& key);
 
   Status Insert(const Sequence& key, const Sequence& value);
 
   Status Delete(const Sequence& key);
 
   bool ContainsKey(const Sequence& key);
+
+  Status Log(const std::string& msg) { return io_.Log(msg); }
 
   // For test
   const std::vector<const char*> EntrySet() {
@@ -53,12 +57,12 @@ class TCDB {
     // WriteLevel0();  // Done
 
     ManifestFormat::ManifestData manifest;
-    io.ReadManifest(manifest);
+    io_.ReadManifest(manifest);
 
     Status ret = BackgroundCompact(manifest);
 
     // DataFileFormat::Footer footer;
-    // io.ReadSSTFooter(manifest.data_files[0][0], footer);
+    // io_.ReadSSTFooter(manifest.data_files[0][0], footer);
   }
 
  private:
@@ -79,6 +83,10 @@ class TCDB {
   Status CompactSST(ManifestFormat::ManifestData& manifest,
                     const int current_level, const int compact_file_num);
 
+  // Called by BackgroundCompact(). This function initializes the multiway
+  // merge process by reading the index blocks of the compact files and pushing
+  // the first DataBlock of each file into the priority queue. The real merging
+  // process will be done in IterMerge().
   Status MultiwayMerge(const std::vector<std::string>& compact_file_abs_path,
                        std::vector<std::string>& new_files);
 
@@ -101,6 +109,18 @@ class TCDB {
       const std::vector<std::vector<uint32_t>>& index_list,
       std::vector<std::string>& new_files);
 
+  // Search the query_key on the specified level
+  Status SearchLevel(const Sequence& query_key, Sequence& ret_key,
+                     const ManifestFormat::ManifestData& manifest,
+                     const int level);
+
+  // Get query_key and corresponding value from the SST file.
+  // If the query_key exists, it should be unique and the searching process
+  // will exit once a "Equal" key is found.
+  Status GetFromSST(const Sequence& query_key, Sequence& ret_key,
+                    const std::string& file_abs_path,
+                    const DataFileFormat::Footer& footer);
+
   std::mutex mutex_;  // Basic mutex
 
   RAIILock global_lock_;
@@ -109,5 +129,11 @@ class TCDB {
 
   TCTable* volatile_table_;
 
-  TCIO io;
+  TCIO io_;
+
+  TCThreadPool worker_;
+
+  std::shared_ptr<Cache> cache;
+
+  std::shared_ptr<MemAllocator> query_buffer;
 };

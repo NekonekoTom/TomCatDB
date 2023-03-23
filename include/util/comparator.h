@@ -80,10 +80,23 @@ class InternalEntryComparator : public Comparator<const char*> {
 
   ~InternalEntryComparator() = default;
 
+  // Return true if the first parameter has a larger key AND a larger id.
+  // If the two parameters have the same key, return true if id(x) > id (y).
+  // For comparing only the key part, Equal() should be called.
   bool GreaterOrEquals(const char* const&, const char* const&) const;
+
+  // See GreaterOrEquals() for details.
   bool LessOrEquals(const char* const&, const char* const&) const;
+
+  // Call !LessOrEquals()
   bool Greater(const char* const&, const char* const&) const;
+
+  // Call !GreaterOrEquals()
   bool Less(const char* const&, const char* const&) const;
+
+  // Compare the KEY part only. If key(x) == key(y), return true.
+  // The semantics of this function are not the same as GreaterOrEquals() or
+  // LessOrEquals().
   bool Equal(const char* const&, const char* const&) const;
 
   bool GreaterOrEquals(const std::string& x, const std::string& y) const {
@@ -123,6 +136,37 @@ class MergeComparator : public InternalEntryComparator {
   bool operator()(const std::tuple<Sequence, int, int>& x,
                   const std::tuple<Sequence, int, int>& y) {
     return Greater(std::get<0>(x).data(), std::get<0>(y).data());
+  }
+};
+
+class QueryComparator : public InternalEntryComparator {
+  public:
+  QueryComparator() = default;
+  QueryComparator(const QueryComparator&) = default;
+  QueryComparator& operator=(const QueryComparator&) = delete;
+
+  ~QueryComparator() = default;
+
+  // Return true if the first parameter has a larger key.
+  bool GreaterOrEquals(const char* const&, const char* const&) const;
+
+  // Return true if the first parameter has a smaller key.
+  bool LessOrEquals(const char* const&, const char* const&) const;
+
+  // // Call !LessOrEquals()
+  // bool Greater(const char* const&, const char* const&) const;
+
+  // // Call !GreaterOrEquals()
+  // bool Less(const char* const&, const char* const&) const;
+
+  // // Compare the KEY part only. If key(x) == key(y), return true.
+  // // The semantics of this function are consistent with GreaterOrEquals() and
+  // // LessOrEquals().
+  // bool Equal(const char* const&, const char* const&) const;
+
+  // Functor for std::priority_queue
+  bool operator()(const Sequence& x, const Sequence& y) {
+    return Greater(x.data(), y.data());
   }
 };
 

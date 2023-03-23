@@ -11,8 +11,10 @@ TCIO::TCIO(const std::string& files_dir, RAIILock& io_lock)
 
   assert(BuildMetadataFile().StatusNoError());
 
+  logger_ = std::make_shared<TCLogger>(
+      neko_base::PathJoin(kDatabaseDir, kLogFilename));
+
   for (int i = 0; i < kDefaultReaderNum; ++i)
-    // readers_.push_back(new SequentialReader(kDefaultReaderBufferSize));
     readers_.push_back(
         std::make_shared<SequentialReader>(kDefaultReaderBufferSize));
 }
@@ -27,7 +29,7 @@ TCIO::~TCIO() {
 }
 
 Status TCIO::WriteLevel0File(const TCTable* immutable,
-                                  ManifestFormat::ManifestData& manifest) {
+                             ManifestFormat::ManifestData& manifest) {
   Status ret;
 
   // Write level0 file
@@ -53,7 +55,7 @@ Status TCIO::WriteLevel0File(const TCTable* immutable,
 }
 
 Status TCIO::WriteNewSSTFile(const std::vector<Sequence>& entry_set,
-                                  std::string& file_basename) {
+                             std::string& file_basename) {
   Status ret;
 
   char file_basename_cstr[17] = {};
@@ -93,7 +95,8 @@ Status TCIO::WriteMergeSSTFile(
 Status TCIO::UpdateManifest(
     ManifestFormat::ManifestData& old_manifest,
     const std::vector<std::pair<int, int>>& compact_file_index,
-    const std::vector<std::string>& new_files, const int current_level) {
+    const std::vector<std::string>& new_files, const int current_level,
+    const int insert_index) {
   Status ret;
 
   ManifestFormat::ManifestData manifest = old_manifest;
@@ -110,34 +113,33 @@ Status TCIO::UpdateManifest(
   // The std::vector remove_points MUST be ascending
   neko_base::Remove(manifest.data_files[current_level], remove_points);
 
-  // Clean current + 1 level
-  // while (it != compact_file_index.end()) {
-  --it;  // *(it + 1) is the first element at current + 1 level
-  auto reverse_it = compact_file_index.end() - 1;
-  while (reverse_it != compact_file_index.begin() && reverse_it != it) {
-    // Delete by swap, the vector will be sorted later
-    // std::swap(manifest.data_files[current_level + 1][it->second],
-    std::swap(manifest.data_files[current_level + 1][reverse_it->second],
-              manifest.data_files[current_level + 1].back());
-    manifest.data_files[current_level + 1].pop_back();
-    // ++it;
-    --reverse_it;
-  }
-
   // Insert new SST files
   if (manifest.data_files.size() <= current_level + 1) {
     // Push an empty vector
     manifest.data_files.push_back(std::vector<std::string>());
   }
-  for (auto& nf : new_files) {
-    manifest.data_files[current_level + 1].push_back(nf);
+
+  std::pair<int, int> boundary;
+  if (it == compact_file_index.end()) {
+    // Did not compact any files at level <current_level + 1>
+
+    // The insert_index has 3 conditions:
+    //   0: push front;
+    //   data_files.size(): push back;
+    //   others: insert at insert_index;
+    // Here, the insert_index can only be 0 or data_files.size()
+    assert(insert_index == 0 ||
+           insert_index == manifest.data_files[current_level + 1].size());
+    boundary = std::make_pair(insert_index, insert_index);
+  } else {
+    boundary = std::make_pair(it->second, compact_file_index.back().second + 1);
   }
 
-  // Sort current + 1 level
-  std::sort(manifest.data_files[current_level + 1].begin(),
-            manifest.data_files[current_level + 1].end());
+  // Note: compact_file_index at level <current_level + 1> are consistent.
+  assert(neko_base::RearrangeFilesInManifest(
+      manifest.data_files[current_level + 1], boundary, new_files,
+      current_level + 1));
 
-  // return WriteManifest(manifest);
   ret = WriteManifest(manifest);
   if (ret.StatusNoError()) {
     old_manifest = manifest;
@@ -177,7 +179,7 @@ Status TCIO::ReadManifest(ManifestFormat::ManifestData& manifest) {
 
 // TODO: Reuse another version
 Status TCIO::ReadSSTFooter(const std::string& file_abs_path,
-                                DataFileFormat::Footer& footer) {
+                           DataFileFormat::Footer& footer) {
   Status ret;
 
   // Get a SequentialReader
@@ -208,8 +210,8 @@ Status TCIO::ReadSSTFooter(const std::string& file_abs_path,
 }
 
 Status TCIO::ReadSSTFooter(const std::string& file_abs_path,
-                                DataFileFormat::Footer& footer,
-                                std::string& min_key, std::string& max_key) {
+                           DataFileFormat::Footer& footer, std::string& min_key,
+                           std::string& max_key) {
   Status ret;
 
   // Get a SequentialReader
@@ -249,8 +251,8 @@ Status TCIO::ReadSSTFooter(const std::string& file_abs_path,
 }
 
 Status TCIO::ReadSSTIndex(const std::string& file_abs_path,
-                               DataFileFormat::Footer& footer,
-                               std::vector<uint32_t>& data_blk_offset) {
+                          const DataFileFormat::Footer& footer,
+                          std::vector<uint32_t>& data_blk_offset) {
   Status ret;
 
   // Get a SequentialReader
@@ -281,11 +283,12 @@ Status TCIO::ReadSSTIndex(const std::string& file_abs_path,
   return ret;
 }
 
-Status TCIO::ReadSSTDataBlock(
-    const std::string& file_abs_path,
-    std::shared_ptr<MemAllocator>& merge_allocator,
-    std::vector<Sequence>& entry_set, const uint64_t block_size,
-    const ::ssize_t block_offset, const int reuse_block_id) {
+Status TCIO::ReadSSTDataBlock(const std::string& file_abs_path,
+                              std::shared_ptr<MemAllocator>& merge_allocator,
+                              std::vector<Sequence>& entry_set,
+                              const uint64_t block_size,
+                              const ::ssize_t block_offset,
+                              const int reuse_block_id) {
   Status ret;
 
   // Get a SequentialReader
@@ -336,27 +339,34 @@ Status TCIO::ReadSSTDataBlock(
 }
 
 Status TCIO::BuildMetadataFile() {
-  Status ret;
+  Status ret = Status().NoError();
   std::shared_ptr<SequentialWriter> writer;
 
-  // Write manifest
-  writer = std::make_shared<SequentialWriter>(
-      new DBFile(neko_base::PathJoin(kDatabaseDir, kManifestFilename),
-                 DBFile::Mode::kNewFile),
-      kDefaultWriterBufferSize);
-  ret = writer->WriteFragment(
-      neko_base::PathJoin(kDatabaseDir, kManifestFilename) + "\n" +
-      neko_base::PathJoin(kDatabaseDir, kLogFilename));
-  if (!ret.StatusNoError())
-    return ret;
+  // If the manifest file does not exist or does not have rwx permissions
+  if (access(neko_base::PathJoin(kDatabaseDir, kManifestFilename).c_str(),
+             F_OK) != 0) {
+    // Write manifest
+    writer = std::make_shared<SequentialWriter>(
+        new DBFile(neko_base::PathJoin(kDatabaseDir, kManifestFilename),
+                   DBFile::Mode::kNewFile),
+        kDefaultWriterBufferSize);
+    ret = writer->WriteFragment(
+        neko_base::PathJoin(kDatabaseDir, kManifestFilename) + "\n" +
+        neko_base::PathJoin(kDatabaseDir, kLogFilename));
+    if (!ret.StatusNoError())
+      return ret;
+  }
 
-  // Write log
-  writer = std::make_shared<SequentialWriter>(
-      new DBFile(neko_base::PathJoin(kDatabaseDir, kLogFilename),
-                 DBFile::Mode::kNewFile),
-      kDefaultWriterBufferSize);
-  ret = writer->WriteFragment("Created new database.\n");
-  // writer->WriteFragment(neko_base::PathJoin(kDatabaseDir, kLogFilename));
+  if (access(neko_base::PathJoin(kDatabaseDir, kLogFilename).c_str(), F_OK) !=
+      0) {
+    // Write log
+    writer = std::make_shared<SequentialWriter>(
+        new DBFile(neko_base::PathJoin(kDatabaseDir, kLogFilename),
+                   DBFile::Mode::kNewFile),
+        kDefaultWriterBufferSize);
+    ret = writer->WriteFragment("Created new database.\n");
+    // writer->WriteFragment(neko_base::PathJoin(kDatabaseDir, kLogFilename));
+  }
 
   return ret;
 }
@@ -394,7 +404,7 @@ Status TCIO::WriteManifest(const ManifestFormat::ManifestData& manifest) {
 }
 
 Status TCIO::WriteSSTFile(const std::string& file_name,
-                               const std::vector<Sequence>& entry_set) {
+                          const std::vector<Sequence>& entry_set) {
   Status ret;
   std::vector<uint32_t> data_blk_offset;
 
@@ -437,7 +447,7 @@ Status TCIO::WriteSSTFile(const std::string& file_name,
 }
 
 Status TCIO::WriteSSTFile(const std::string& file_name,
-                               const std::vector<const char*>& entry_set) {
+                          const std::vector<const char*>& entry_set) {
   std::vector<Sequence> seq_entries;
   for (const char* e : entry_set) {
     seq_entries.push_back(InternalEntry::EntryData(e));
@@ -446,9 +456,9 @@ Status TCIO::WriteSSTFile(const std::string& file_name,
 }
 
 Status TCIO::WriteSSTData(std::shared_ptr<SequentialWriter>& sw_ptr,
-                               const std::vector<Sequence>& entry_set,
-                               std::vector<uint32_t>& data_blk_offset,
-                               uint32_t& data_block_size) {
+                          const std::vector<Sequence>& entry_set,
+                          std::vector<uint32_t>& data_blk_offset,
+                          uint32_t& data_block_size) {
   Status ret;
   uint32_t cur_blk_size = 0;        // Record current block size
   uint32_t cur_offset = 0;          // Record current offset
@@ -492,7 +502,7 @@ Status TCIO::WriteSSTData(std::shared_ptr<SequentialWriter>& sw_ptr,
 }
 
 Status TCIO::WriteSSTIndex(std::shared_ptr<SequentialWriter>& sw_ptr,
-                                const std::vector<uint32_t>& data_blk_offset) {
+                           const std::vector<uint32_t>& data_blk_offset) {
   Status ret;
   uint32_t* index_block = new uint32_t[data_blk_offset.size() + 1];
   uint32_t* index_block_ptr = index_block;
@@ -516,25 +526,7 @@ Status TCIO::WriteSSTFlexible(std::shared_ptr<SequentialWriter>& sw_ptr) {
 }
 
 Status TCIO::WriteSSTFileFooter(std::shared_ptr<SequentialWriter>& sw_ptr,
-                                     const uint32_t max_key_offset,
-                                     const uint32_t data_block_size,
-                                     const uint32_t index_block_size,
-                                     const uint32_t flexible_block_size) {
-  // uint32_t footer_size = sizeof(max_key_offset) + sizeof(data_block_size) +
-  //                        sizeof(index_block_size) + sizeof(flexible_block_size);
-  // char* footer = new char[footer_size];
-  char* footer = new char[DataFileFormat::kSSTFooterSize];
-  uint32_t* footer_ptr = reinterpret_cast<uint32_t*>(footer);
-  *footer_ptr++ = max_key_offset;
-  *footer_ptr++ = data_block_size;
-  *footer_ptr++ = index_block_size;
-  *footer_ptr = flexible_block_size;
-
-  return sw_ptr->WriteFragment(footer, DataFileFormat::kSSTFooterSize);
-}
-
-Status TCIO::WriteSSTFileFooter(std::shared_ptr<SequentialWriter>& sw_ptr,
-                                     const DataFileFormat::Footer& footer) {
+                                const DataFileFormat::Footer& footer) {
   char* footer_cptr = new char[DataFileFormat::kSSTFooterSize];
   uint32_t* footer_ptr = reinterpret_cast<uint32_t*>(footer_cptr);
   *footer_ptr++ = footer.min_key_size;

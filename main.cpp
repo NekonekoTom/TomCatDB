@@ -59,13 +59,23 @@ int main() {
       "/home/tom_cat/workdir/private/CS/C++/Primer/TomCatDB/test_data/test.csv",
       records);
 
+  std::string why;
   // Big data test
-  for (int circle = 0; circle < 200; ++circle) {
+  // for (int circle = 0; circle < 200; ++circle) {
+  clock_t begin = std::clock(), end;
+  for (int circle = 0; circle < 20; ++circle) {
     for (int i = 0; i < records; ++i) {
-      db.Insert(csv_data[i][0], csv_data[i][10]); // id and description
+      if (csv_data[i][0] == std::string("13911206"))
+        why = db.Get(std::string("idCircle-4"));
+      db.Insert(csv_data[i][0] + "Circle-" + std::to_string(circle), csv_data[i][10]); // id and description
+      // db.Insert(csv_data[0][0], csv_data[0][10]); // id and description
+      // db.Insert(csv_data[i][0], csv_data[i][10]); // id and description
       // db.Insert(csv_data[i][0], csv_data[i][20]);  // id and name
     }
   }
+  end = std::clock();
+
+  auto write_time = static_cast<double>(end - begin) / CLOCKS_PER_SEC * 1000; // in ms
 
   // // Small data test
   // for (int i = 0; i < records; ++i) {
@@ -75,10 +85,36 @@ int main() {
 
   auto entry_set = db.EntrySet();
 
+  // Error get test
+  int error = 0;
+  for (int circle = 0; circle < 20; ++circle) {
+    for (int i = 0; i < records; ++i) {
+      auto test_key = csv_data[i][0] + "Circle-" + std::to_string(circle);
+      why = db.Get(test_key); // id and description
+      if (why.empty()) {
+        db.Log("Try to get key [" + test_key + "] error. Result empty.");
+        ++error;
+      }
+    }
+  }
+
+  int correct = 0;
+  for (int i = 0; i < 20; ++i) {
+    // if (!db.Get(std::string("idCircle-" + std::to_string(i))).empty()) {
+    auto fk = db.Get(std::string("13911206Circle-" + std::to_string(i)));
+    if (!fk.empty()) {
+      ++correct;
+    }
+  }
+
   // auto val = db.Get(std::string("14402792"));
-  auto val1 = db.Get(std::string("id"));
-  auto val2 = db.Get(std::string("3895911"));
-  auto val3 = db.Get(std::string("13911206"));
+  auto val1 = db.Get(std::string("idCircle-3"));
+  auto val2 = db.Get(std::string("3895911Circle-3"));
+  auto val3 = db.Get(std::string("13911206Circle-3"));
+  auto val4 = db.Get(std::string("13911206Circle-7"));
+  // auto val1 = db.Get(std::string("id"));
+  // auto val2 = db.Get(std::string("3895911"));
+  // auto val3 = db.Get(std::string("13911206"));
 
   db.TestEntryPoint();
   return 0;

@@ -17,7 +17,6 @@ TCTable::~TCTable() {
 const Sequence TCTable::Get(const Sequence& key) const {
   uint64_t entry_size = coding::SizeOfVarint(key.size()) + key.size() + 9;
 
-  // char* internal_entry = new char[entry_size];  // Should be deleted
   table_lock_.Lock();
   char* internal_entry = query_allocator_->Allocate(entry_size);
   table_lock_.Unlock();
@@ -37,13 +36,27 @@ const Sequence TCTable::Get(const Sequence& key) const {
       if (InternalEntry::EntryOpType(the_node->key_) ==
           InternalEntry::kInsert) {
         // return new Sequence(the_node->key_, 0);
-        // delete internal_entry;  // Delete internal_entry
         return InternalEntry::EntryValue(the_node->key_);
       }
     }
   }
 
-  // delete internal_entry;  // Delete internal_entry
+  return Sequence();
+}
+
+const Sequence TCTable::Get(const char* internal_entry) const {
+  table_lock_.Lock();
+  // const SkipListNode<const char*>* the_node = table_.Get(internal_entry);
+  auto the_node = table_.Get(internal_entry);
+  table_lock_.Unlock();
+
+  if (the_node != nullptr) {
+    if (InternalEntry::EntryOpType(the_node->key_) == InternalEntry::kInsert) {
+      // return new Sequence(the_node->key_, 0);
+      return InternalEntry::EntryValue(the_node->key_);
+    }
+  }
+
   return Sequence();
 }
 
