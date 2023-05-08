@@ -1,4 +1,5 @@
+build
 db
 test_data
-main.out
+main
 *.tdb
