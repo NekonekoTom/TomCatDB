@@ -24,15 +24,35 @@ make
 ```
 Then you can run `main.out` for test.
 
+TomCatDB provides two build pipelines.
+- Build using CMake script (recommended)
+  Run the bash script `build_debug.sh`.
+  The script will create a directory `build`.
+  If `build` already exists, it will be removed by the script.
+  All modules are compiled to static library `.a` files, and linked with the `main.cc`.
+
+- Build from `makefile`
+  - Rename the `old_makefile.txt` to makefile;
+  - Rename all `.cc` source files to `.cpp` by running the Python script in `./src`:
+    ```
+    cd ./src
+    python rename_postfix.py .cc .cpp -r
+    ```
+    Or you can modify the `old_makefile.txt` by replacing all `.cpp` with `.cc` without renaming the source files.
+  - Move main.cpp or main.cc to the root directory;
+  - Run command `make` under the root directory. All intermediate files will NOT be reserved by default.
+
 # **Performance**
 TODO: Untested.
 
 # **Others**
 ## TODO list
--[ ] Build by CMake instead of makefile.
+-[x] Build by CMake instead of makefile.
 
 -[ ] Bloom filter.
 
 -[ ] Multithread access.
 
 -[ ] More functions for TCLogger.
+
+-[ ] LRU Cache.
