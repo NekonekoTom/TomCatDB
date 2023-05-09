@@ -26,6 +26,7 @@ Then you can run `main.out` for test.
 
 TomCatDB provides two build pipelines.
 - Build using CMake script (recommended)
+
   Run the bash script `build_debug.sh`.
   The script will create a directory `build`.
   If `build` already exists, it will be removed by the script.

@@ -33,4 +33,33 @@ class Sequence final {
   uint64_t size_ = 0;
 };
 
+class SeqHash {
+ public:
+  uint64_t operator()(const Sequence& seq) const {
+    // Use the same hash strategy as std::string.
+    // The std::string calls:
+    //   std::_Hash_impl::hash(__s.data(), __s.length())
+    // (template specialization for std::hash<T>) to get a hash value.
+    return std::_Hash_impl::hash(seq.data(), seq.size());
+  }
+};
+
+class SeqEqual {
+ public:
+  bool operator()(const Sequence& seq_x, const Sequence& seq_y) const {
+    if (seq_x.size() == seq_y.size()) {
+      auto len = seq_x.size();
+      const char* x = seq_x.data();
+      const char* y = seq_y.data();
+      while (len-- != 0) {
+        if (*x != *y) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+};
+
 #endif

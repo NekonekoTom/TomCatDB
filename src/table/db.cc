@@ -5,8 +5,12 @@ TCDB::TCDB(const Config& config)
       comparator_(std::make_shared<InternalEntryComparator>()),
       volatile_table_(new TCTable(global_lock_, comparator_, 0)),
       io_(config.GetConfig("database_dir"), global_lock_),
-      cache(std::make_shared<LRUCache>()),
-      query_buffer(std::make_shared<QueryAllocator>()) {}
+      query_buffer(std::make_shared<QueryAllocator>()) {
+  // TODO: If the database already exists, read manifest and update file_id_
+  //       and entry_id_.
+
+  cache = std::make_shared<LRUCache<Sequence, Sequence, SeqHash, SeqEqual>>(12);
+}
 
 TCDB::~TCDB() {}
 
@@ -59,8 +63,7 @@ Status TCDB::Insert(const Sequence& key, const Sequence& value) {
   // TODO
   Status ret;
 
-  // TODO: If a compaction process is running, cache current operation
-  // and return. The operation will be continued by the end of compaction.
+  // TODO: MVCC
 
   if (volatile_table_->MemUsage() >= kDefaultSSTFileSize) {
     // WriteLevel0
@@ -223,20 +226,6 @@ Status TCDB::CompactSST(ManifestFormat::ManifestData& manifest,
         return ret;
       }
 
-      // // log
-      // std::string content;
-      // content +=
-      //     "Iter on " + manifest.data_files[current_level + 1][i].substr(13, 3);
-      // auto s1 = InternalEntry::EntryKey(min_internal_entry.c_str());
-      // auto s2 = InternalEntry::EntryKey(max_internal_entry.c_str());
-      // auto s3 = InternalEntry::EntryKey(iter_min_entry.c_str());
-      // auto s4 = InternalEntry::EntryKey(iter_max_entry.c_str());
-      // content += ". Target:[" + std::string(s1.data(), s1.size()) + "," +
-      //            std::string(s2.data(), s2.size()) + "]; ";
-      // content += "Current:[" + std::string(s3.data(), s3.size()) + "," +
-      //            std::string(s4.data(), s4.size()) + "]";
-      // io_.Log(content);
-
       if (comparator_->Greater(min_internal_entry, iter_max_entry)) {
         // Not reached the range yet, ++i
         continue;
@@ -257,18 +246,6 @@ Status TCDB::CompactSST(ManifestFormat::ManifestData& manifest,
   // Found all overlaped SST files, start multi-way merging
   std::vector<std::string> new_files;
   std::vector<std::string> compact_file_abs_path;
-
-  // log
-  std::string content = "Compact files: ";
-  for (int i = 0; i < compact_file_index.size(); ++i)
-    content += manifest
-                   .data_files[compact_file_index[i].first]
-                              [compact_file_index[i].second]
-                   .substr(13, 4) +
-               ',';
-  content.pop_back();
-  content += " from level" + std::to_string(current_level);
-  io_.Log(content);
 
   // Make a vector of abs path of the compact files
   for (int i = 0; i < compact_file_index.size(); ++i)

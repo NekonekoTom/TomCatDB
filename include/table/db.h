@@ -133,7 +133,7 @@ class TCDB {
 
   TCThreadPool worker_;
 
-  std::shared_ptr<Cache> cache;
+  std::shared_ptr<Cache<Sequence, Sequence>> cache;
 
   std::shared_ptr<MemAllocator> query_buffer;
 };
