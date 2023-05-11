@@ -21,7 +21,20 @@ class DualList {
   };
 
   DualList() : head_(nullptr), tail_(nullptr), size_(0) {}
-  virtual ~DualList() {}
+  virtual ~DualList() {
+    if (head_ == nullptr || tail_ == nullptr) {
+      // Not initialized
+      return;
+    }
+
+    DualListNode* p = head_;
+    DualListNode* next_node;
+    while (p != nullptr) {
+      next_node = p->next;
+      delete p;
+      p = next_node;
+    }
+  }
 
   virtual void MoveFront(DualListNode* node) {
     assert(node != nullptr);

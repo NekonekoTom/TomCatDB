@@ -39,7 +39,6 @@ void ThreadPool::InitThreadPool() {
 
   // if (thread_queue_.size() < kMaxCoreThreadNum) {
   while (thread_queue_.size() < kMaxCoreThreadNum) {
-    std::cout << "Constructing new background thread task ...\n";
     std::thread* new_thread =
         new std::thread(&ThreadPool::BackgroundThreadTask, this);
     new_thread->detach();
@@ -51,8 +50,6 @@ void ThreadPool::InitThreadPool() {
 }
 
 void ThreadPool::BackgroundThreadTask() {
-  std::cout << "Executing background thread task ...\n";
-
   ThreadTask* first_task = nullptr;
   while (true) {
     {

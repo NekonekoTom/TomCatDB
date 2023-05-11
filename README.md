@@ -44,7 +44,9 @@ TomCatDB provides two build pipelines.
   - Run command `make` under the root directory. All intermediate files will NOT be reserved by default.
 
 # **Performance**
-TODO: Untested.
+- Write performance:
+
+  TomCatDB can process 100000 write operations in 0.235s on average.
 
 # **Others**
 ## TODO list

@@ -25,6 +25,8 @@ class Status {
     return Status(Code::kBadArgumentError, "<ERROR>" + err_msg);
   }
 
+  const std::string& ErrMsg() const { return err_msg_; }
+
  private:
   enum Code {
     kOk = 0,

@@ -42,14 +42,19 @@ class TCTable {
   const uint64_t GetNextEntryID() const { return entry_id_; }
 
  private:
+  // Use invalid_key_ in the construction function of the SkipList
+  char* invalid_key_;
+
   // Stores char pointers only, the actual resources are managed by mem_allocator_
   SkipList<const char*, InternalEntryComparator> table_;
 
   // Responsible for allocating and managing the data resources
-  MemAllocator* const mem_allocator_;
+//   MemAllocator* const mem_allocator_;
+  std::shared_ptr<MemAllocator> mem_allocator_;
 
   // Responsible for allocating and managing the data resources FOR QUERY
-  MemAllocator* const query_allocator_;
+//   MemAllocator* const query_allocator_;
+  std::shared_ptr<MemAllocator> query_allocator_;
 
   uint64_t entry_id_ = 0;  // TODO: The entry_id_ should be globally unique
 

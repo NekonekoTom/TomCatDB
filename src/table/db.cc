@@ -9,10 +9,13 @@ TCDB::TCDB(const Config& config)
   // TODO: If the database already exists, read manifest and update file_id_
   //       and entry_id_.
 
-  cache = std::make_shared<LRUCache<Sequence, Sequence, SeqHash, SeqEqual>>(12);
+  cache = std::make_shared<LRUCache<Sequence, Sequence, SeqHash, SeqEqual>>();
 }
 
-TCDB::~TCDB() {}
+TCDB::~TCDB() {
+  if (volatile_table_ != nullptr)
+    delete volatile_table_;
+}
 
 std::string TCDB::Get(const Sequence& key) {
   // TODO

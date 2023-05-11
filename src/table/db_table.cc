@@ -3,15 +3,16 @@
 TCTable::TCTable(RAIILock& lock,
                  const std::shared_ptr<InternalEntryComparator>& comparator,
                  const uint64_t first_entry_id)
-    : table_(comparator, new char),  // Waste 1 byte here, will never delete.
-      mem_allocator_(new MemAllocator()),
-      query_allocator_(new MemAllocator()),
+    : invalid_key_(new char(0)),
+      table_(comparator, invalid_key_),
+      mem_allocator_(std::make_shared<MemAllocator>()),
+      query_allocator_(std::make_shared<MemAllocator>()),
       table_lock_(lock),
       entry_id_(first_entry_id) {}
 
 TCTable::~TCTable() {
-  if (mem_allocator_ != nullptr)
-    delete mem_allocator_;
+  if (invalid_key_ != nullptr)
+    delete invalid_key_;
 }
 
 const Sequence TCTable::Get(const Sequence& key) const {

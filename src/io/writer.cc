@@ -97,7 +97,7 @@ Status BaseWriter::WriteAppendFile() {
 
 BaseWriter::~BaseWriter() {
   if (buffer_ != nullptr) {
-    delete buffer_;
+    delete[] buffer_;
   }
   if (dbfile_ != nullptr) {
     delete dbfile_;

@@ -127,11 +127,17 @@ SkipList<K, Cmp>::SkipList(const std::shared_ptr<Cmp>& comparator, const K& last
 template <typename K, class Cmp>
 SkipList<K, Cmp>::~SkipList() {
   if (head_ != nullptr) {
-    delete head_;
-  }
-  if (tail_ != nullptr) {
+    auto delete_node = head_;
+    auto next_node = delete_node->next_[0];
+    while (next_node != tail_) {
+      delete delete_node;
+      delete_node = next_node;
+      next_node = next_node->next_[0];
+    }
+    delete delete_node;
     delete tail_;
   }
+
   if (last_node_ != nullptr) {
     delete[] last_node_;
   }

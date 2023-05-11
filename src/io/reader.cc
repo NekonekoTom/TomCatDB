@@ -2,7 +2,7 @@
 
 BaseReader::~BaseReader() {
   if (buffer_ != nullptr)
-    delete buffer_;
+    delete[] buffer_;
 }
 
 Status BaseReader::IsCorrectlyOpened(DBFile* file) {

@@ -3,13 +3,17 @@
 TCIO::TCIO(const std::string& files_dir, RAIILock& io_lock)
     : kDatabaseDir(files_dir), io_lock_(io_lock) {
   // If the kDatabaseDir does not exist or does not have rwx permissions
-  if (access(kDatabaseDir.c_str(), F_OK | W_OK | X_OK) != 0) {
-    // Assert fails when the directory did not have the desired permissions
-    // or mkdir() operation failed
-    assert(mkdir(kDatabaseDir.c_str(), 0744) == 0);  // Must have rwx permission
+  int stat = access(kDatabaseDir.c_str(), F_OK | W_OK | X_OK);
+  while (stat != 0) {
+    while (stat != 0)
+      stat = mkdir(kDatabaseDir.c_str(), 0744);
+    stat = access(kDatabaseDir.c_str(), F_OK | W_OK | X_OK);
+    if (stat != 0)
+      printf("errno: %d\n", errno);
   }
 
-  assert(BuildMetadataFile().StatusNoError());
+  Status ret = BuildMetadataFile();
+  assert(ret.StatusNoError());
 
   logger_ = std::make_shared<TCLogger>(
       neko_base::PathJoin(kDatabaseDir, kLogFilename));
@@ -536,5 +540,7 @@ Status TCIO::WriteSSTFileFooter(std::shared_ptr<SequentialWriter>& sw_ptr,
   *footer_ptr++ = footer.index_blk_size;
   *footer_ptr = footer.flexible_blk_size;
 
-  return sw_ptr->WriteFragment(footer_cptr, DataFileFormat::kSSTFooterSize);
+  Status ret = sw_ptr->WriteFragment(footer_cptr, DataFileFormat::kSSTFooterSize);
+  delete[] footer_cptr;
+  return ret;
 }

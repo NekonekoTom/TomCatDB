@@ -3,7 +3,7 @@
 MemAllocator::~MemAllocator() {
   for (auto& ptr : block_ptr_) {
     if (ptr != nullptr)
-      delete ptr;
+      delete[] ptr;
   }
 }
 
@@ -60,7 +60,7 @@ const int MemAllocator::Unref(const std::vector<char*>::size_type block_id) {
 void MemAllocator::ReleaseIdleSpace() {
   for (int i = 0; i < ref.size(); ++i) {
     if (ref[i] == 0) {
-      delete block_ptr_[i];
+      delete[] block_ptr_[i];
       block_ptr_[i] = nullptr;
     }
   }
@@ -68,7 +68,7 @@ void MemAllocator::ReleaseIdleSpace() {
 
 void MemAllocator::ReleaseIdleSpace(const int block_id) {
   assert(block_id < ref.size() && ref[block_id] == 0);
-  delete block_ptr_[block_id];
+  delete[] block_ptr_[block_id];
   block_ptr_[block_id] = nullptr;
 }
 

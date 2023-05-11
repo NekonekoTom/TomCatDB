@@ -44,7 +44,7 @@ class LRUCache : public Cache<K, V> {
   LRUCache(const LRUCache&) = delete;
   LRUCache& operator()(const LRUCache&) = delete;
 
-  ~LRUCache();
+  ~LRUCache() = default;
 
   bool Get(const K&, V&);
 
@@ -61,9 +61,6 @@ LRUCache<K, V, Hash, Equal>::LRUCache(const uint32_t capacity)
   index_ = std::unordered_map<K, typename DualList::DualListNode*, Hash, Equal>(
       this->size(), Hash(), Equal());
 }
-
-template <typename K, typename V, typename Hash, typename Equal>
-LRUCache<K, V, Hash, Equal>::~LRUCache() {}
 
 template <typename K, typename V, typename Hash, typename Equal>
 bool LRUCache<K, V, Hash, Equal>::Get(const K& key, V& ret_value) {
