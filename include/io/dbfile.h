@@ -7,15 +7,6 @@
 #include <unistd.h>
 #include <string>
 
-// // However, the Reader objects are not responsible for DBFile pointers,
-// // the pointers should be deleted manually.
-// // The reason why we design the Writer and Reader in two various ways is that
-// // we hope the Writers to write asynchronously to maximize the use of buffer
-// // space and reduce redundant file operations, meanwhile, the Readers are
-// // expected to read new changes of data as soon as possible.
-// // Therefore, the Writers will keep their DBFile pointers until the buffer
-// // is full, and the Readers don't keep any DBFile pointers.
-
 // Do not recommend directly delete(free) the DBFile pointers in Writers.
 // Users should deliver this mission to the Writer objects.
 class DBFile final {

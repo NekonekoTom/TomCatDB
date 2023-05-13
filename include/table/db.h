@@ -77,11 +77,19 @@ class TCDB {
   // compaction is finished.
   Status BackgroundCompact(ManifestFormat::ManifestData& manifest);
 
-  // Compact the SST file. Find all overlapped SST files in current level (if
+  // Compact the SST file. Find all overlapped SST files at current level (if
   // current_level == 0) and the next level (current_level + 1), make a vector
   // that includes all overlapped files, and then call MultiwayMerge().
   Status CompactSST(ManifestFormat::ManifestData& manifest,
                     const int current_level, const int compact_file_num);
+
+  // Compact the SST file. Find all overlapped SST files at current level (if
+  // current_level == 0) and the next level (current_level + 1), make a vector
+  // that includes all overlapped files, and then call MultiwayMerge().
+  // Note: all files are at the same level and MUST be continuous!
+  Status CompactSST(ManifestFormat::ManifestData& manifest,
+                    const int current_level,
+                    const std::vector<int>& compact_file_num);
 
   // Called by BackgroundCompact(). This function initializes the multiway
   // merge process by reading the index blocks of the compact files and pushing

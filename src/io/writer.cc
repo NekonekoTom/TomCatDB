@@ -22,16 +22,6 @@ const int BaseWriter::AppendToBuffer(const char* src, const int size) {
 }
 
 const int BaseWriter::AppendToBuffer(const Sequence& seq) {
-  // if (!AbleToBuffer(seq.size())) {
-  //   std::memcpy(buffer_ + pos_, seq.data(), kMaxBufferSize - pos_);
-  //   auto ret = kMaxBufferSize - pos_;
-  //   pos_ = kMaxBufferSize;
-  //   return ret;
-  // }
-
-  // std::memcpy(buffer_ + pos_, seq.data(), seq.size());
-  // pos_ += seq.size();
-  // return seq.size();
   return AppendToBuffer(seq.data(), seq.size());
 }
 
@@ -65,32 +55,32 @@ Status BaseWriter::WriteNewFile() {
   return Status::NoError();
 }
 
+// Reimplement BaseWriter::WriteAppendFile()
 Status BaseWriter::WriteAppendFile() {
   if (dbfile_ == nullptr) {
     return Status::BadArgumentError("No dbfile specified.");
   }
-  if (dbfile_->mode() != DBFile::kAppend) {
-    // Try to close and reopen
-    dbfile_->Close();
-    dbfile_->set_mode(DBFile::Mode::kAppend);
-  }
-  if (!dbfile_->IsOpened()) {
-    if (!dbfile_->Open()) {
-      return Status::FileIOError("Cannot open dbfile.");
-    }
+
+  int max_retry = 5;
+  int fd = -1;
+  while (max_retry-- >= 0 && fd < 0) {
+    fd =
+        open(dbfile_->file_name().c_str(), O_APPEND | O_WRONLY | O_CREAT, 0644);
   }
 
-  const int kMaxRetry = 5;
-  int written_bytes = 0, retry = 0;
+  if (fd < 0) {
+    return Status::FileIOError("Cannot open dbfile.");
+  }
+
+  // Write until succeed
+  int written_bytes = 0;
   while (written_bytes < pos_) {
-    if (retry++ >= kMaxRetry) {
-      return Status::FileIOError();
-    }
-    written_bytes +=
-        write(dbfile_->fd(), buffer_ + written_bytes, pos_ - written_bytes);
+    int write_stat = write(fd, buffer_ + written_bytes, pos_ - written_bytes);
+    if (write_stat > 0)
+      written_bytes += write_stat;
   }
 
-  dbfile_->Close();
+  while (close(fd) < 0);
   ClearBuffer();  // Reset buffer
   return Status::NoError();
 }

@@ -140,9 +140,10 @@ Status TCIO::UpdateManifest(
   }
 
   // Note: compact_file_index at level <current_level + 1> are consistent.
-  assert(neko_base::RearrangeFilesInManifest(
-      manifest.data_files[current_level + 1], boundary, new_files,
-      current_level + 1));
+  if (!neko_base::RearrangeFilesInManifest(
+          manifest.data_files[current_level + 1], boundary, new_files,
+          current_level + 1))
+    return Status::UndefinedError();
 
   ret = WriteManifest(manifest);
   if (ret.StatusNoError()) {
@@ -252,6 +253,53 @@ Status TCIO::ReadSSTFooter(const std::string& file_abs_path,
   io_lock_.Unlock();
 
   return Status::NoError();
+}
+
+Status TCIO::ReadSSTFooter(
+    const std::vector<std::string>& file_abs_path,
+    std::vector<DataFileFormat::Footer>& footer_contents,
+    std::vector<std::pair<std::string, std::string>>& min_max_keys) {
+  Status ret;
+
+  DataFileFormat::Footer footer;
+  std::string min_key, max_key;
+  for (auto& f_abs_path : file_abs_path) {
+    ret = ReadSSTFooter(f_abs_path, footer, min_key, max_key);
+    if (!ret.StatusNoError())
+      return ret;
+
+    footer_contents.push_back(footer);
+    min_max_keys.emplace_back(min_key, max_key);
+  }
+
+  return ret;
+}
+
+Status TCIO::ReadSSTBoundary(const std::string& file_abs_path,
+                             std::string& min_key, std::string& max_key) {
+  Status ret;
+
+  DataFileFormat::Footer footer;
+
+  return ReadSSTFooter(file_abs_path, footer, min_key, max_key);
+}
+
+Status TCIO::ReadSSTGroupBoundary(
+    const std::vector<std::string>& file_abs_path,
+    std::vector<std::pair<std::string, std::string>>& min_max_keys) {
+  Status ret;
+
+  DataFileFormat::Footer footer;
+  std::string min_key, max_key;
+  for (auto& f_abs_path : file_abs_path) {
+    ret = ReadSSTFooter(f_abs_path, footer, min_key, max_key);
+    if (!ret.StatusNoError())
+      return ret;
+
+    min_max_keys.emplace_back(min_key, max_key);
+  }
+
+  return ret;
 }
 
 Status TCIO::ReadSSTIndex(const std::string& file_abs_path,
@@ -540,7 +588,8 @@ Status TCIO::WriteSSTFileFooter(std::shared_ptr<SequentialWriter>& sw_ptr,
   *footer_ptr++ = footer.index_blk_size;
   *footer_ptr = footer.flexible_blk_size;
 
-  Status ret = sw_ptr->WriteFragment(footer_cptr, DataFileFormat::kSSTFooterSize);
+  Status ret =
+      sw_ptr->WriteFragment(footer_cptr, DataFileFormat::kSSTFooterSize);
   delete[] footer_cptr;
   return ret;
 }

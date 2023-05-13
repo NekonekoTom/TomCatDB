@@ -119,13 +119,12 @@ Status TCDB::WriteLevel0() {
     return Status::FileIOError("Failed to read MANIFEST file.");
   if (!manifest.data_files.empty() &&
       manifest.data_files[0].size() >= kDefaultLevelSize[0]) {
-    // TODO: Background compaction and rewrite manifest
     ret = BackgroundCompact(manifest);
     if (!ret.StatusNoError())
       return ret;
   }
 
-  assert(io_.WriteLevel0File(immutable, manifest).StatusNoError());
+  ret = io_.WriteLevel0File(immutable, manifest);
 
   delete immutable;
 
@@ -147,8 +146,13 @@ Status TCDB::BackgroundCompact(ManifestFormat::ManifestData& manifest) {
   // If the current SST files size exceeds limits, start a new Compaction
   for (int i = 0; i < manifest.data_files.size();) {
     if (manifest.data_files[i].size() >= kDefaultLevelSize[i]) {
-      ret = CompactSST(manifest, i, 0);  // TODO: Each compaction should compact
-                                         // all files that exceed the limit.
+      // ret = CompactSST(manifest, i, 0);  // TODO: Each compaction should compact
+      //                                    // all files that exceed the limit.
+      int exceed_files = manifest.data_files[i].size() - kDefaultLevelSize[i] + 1;
+      std::vector<int> file_nums(exceed_files);
+      for (int i = 0; i < exceed_files; ++i)
+        file_nums[i] = i;
+      ret = CompactSST(manifest, i, file_nums);
       if (!ret.StatusNoError()) {
         return ret;
       }
@@ -257,6 +261,147 @@ Status TCDB::CompactSST(ManifestFormat::ManifestData& manifest,
                             manifest.data_files[compact_file_index[i].first]
                                                [compact_file_index[i].second]) +
         io_.kSSTFilePostfix);
+  ret = MultiwayMerge(compact_file_abs_path, new_files);
+  if (!ret.StatusNoError()) {
+    return ret;
+  }
+
+  // Update Manifest file
+  return io_.UpdateManifest(manifest, compact_file_index, new_files,
+                            current_level, insert_from_index);
+  // TODO: A background thread should scan the folder and clean old SST files.
+}
+
+Status TCDB::CompactSST(ManifestFormat::ManifestData& manifest,
+                        const int current_level,
+                        const std::vector<int>& compact_file_num) {
+  Status ret;
+
+  std::vector<std::pair<int, int>> compact_file_index;
+  std::vector<std::string> compact_file_abs_path;
+  std::vector<std::pair<std::string, std::string>> min_max_internal_entries;
+  std::string min_internal_entry, max_internal_entry;
+
+  assert(!compact_file_num.empty());
+  int min_level = compact_file_num[0];
+  for (auto& file_pos : compact_file_num) {
+    compact_file_index.emplace_back(current_level, file_pos);
+    compact_file_abs_path.push_back(
+        neko_base::PathJoin(io_.kDatabaseDir,
+                            manifest.data_files[current_level][file_pos]) +
+        io_.kSSTFilePostfix);
+  }
+
+  // Read the specific files' metadata
+  ret =
+      io_.ReadSSTGroupBoundary(compact_file_abs_path, min_max_internal_entries);
+  if (!ret.StatusNoError()) {
+    return ret;
+  }
+
+  // Find the boundary of the group of SST files
+  // Note: all files MUST be continuous!
+  min_internal_entry = min_max_internal_entries[0].first;
+  max_internal_entry = min_max_internal_entries[0].second;
+  for (int i = 1; i < min_max_internal_entries.size(); ++i) {
+    if (comparator_->Less(min_max_internal_entries[i].first,
+                          min_internal_entry)) {
+      // Update the left boundary
+      min_internal_entry = min_max_internal_entries[i].first;
+    }
+    if (comparator_->Greater(min_max_internal_entries[i].second,
+                             max_internal_entry)) {
+      // Update the right boundary
+      max_internal_entry = min_max_internal_entries[i].second;
+    }
+  }
+
+  std::string iter_min_entry, iter_max_entry;
+  // Iterate level 0 SST files and find all overlapped SST files
+  // Note: if the Compaction starts from above level 0, no need to iterate
+  //       level <current_level> files since all SST files are ordered.
+  if (current_level == 0) {
+    for (int i = 0; i < manifest.data_files[current_level].size(); ++i) {
+      // TODO: Time complexity O(n^2), need optimization?
+      bool in_cfn = false;
+      for (auto cfn : compact_file_num) {
+        // If i in compact_file_num
+        if (cfn == i) {
+          in_cfn = true;
+          break;
+        }
+      }
+      if (in_cfn)
+        continue;
+
+      ret = io_.ReadSSTBoundary(
+          neko_base::PathJoin(io_.kDatabaseDir,
+                              manifest.data_files[current_level][i]) +
+              io_.kSSTFilePostfix,
+          iter_min_entry, iter_max_entry);
+      if (!ret.StatusNoError()) {
+        return ret;
+      }
+
+      // If interval (iter_min,iter_max) does not overlap with (min, max)
+      if (comparator_->Greater(iter_min_entry, max_internal_entry) ||
+          comparator_->Greater(min_internal_entry, iter_max_entry)) {
+        continue;
+      } else {
+        compact_file_index.push_back(std::make_pair(current_level, i));
+        compact_file_abs_path.push_back(
+            neko_base::PathJoin(io_.kDatabaseDir,
+                                manifest.data_files[current_level][i]) +
+            io_.kSSTFilePostfix);
+      }
+    }
+  }
+
+  // Record where the new files will be inserted
+  // auto file_num = manifest.data_files[current_level + 1].size();
+  auto file_num = 0;
+  int insert_from_index = file_num;
+
+  // If level <current_level + 1> not empty
+  if (current_level + 1 < manifest.data_files.size()) {
+    file_num = manifest.data_files[current_level + 1].size();
+    insert_from_index = file_num;
+    // Iterate level <current_level + 1> SST files. Since all SST files above
+    // level 0 are ordered, the search should stop when reaches the max entry.
+    for (int i = 0; i < manifest.data_files[current_level + 1].size(); ++i) {
+      ret = io_.ReadSSTBoundary(
+          neko_base::PathJoin(io_.kDatabaseDir,
+                              manifest.data_files[current_level + 1][i]) +
+              io_.kSSTFilePostfix,
+          iter_min_entry, iter_max_entry);
+      if (!ret.StatusNoError()) {
+        return ret;
+      }
+
+      if (comparator_->Greater(min_internal_entry, iter_max_entry)) {
+        // Not reached the range yet, ++i
+        continue;
+      } else if (comparator_->Greater(iter_min_entry, max_internal_entry)) {
+        // Skipped the range [min_internal_entry, max_internal_entry]
+        if (i == 0)  // All existed files are larger than the new file
+          insert_from_index = 0;
+        break;
+      } else {
+        if (insert_from_index == file_num)  // sfsi not set
+          insert_from_index = i;
+        // Interval overlapped
+        compact_file_index.push_back(std::make_pair(current_level + 1, i));
+        compact_file_abs_path.push_back(
+            neko_base::PathJoin(io_.kDatabaseDir,
+                                manifest.data_files[current_level + 1][i]) +
+            io_.kSSTFilePostfix);
+      }
+    }
+  }
+
+  // Found all overlaped SST files, start multi-way merging
+  std::vector<std::string> new_files;
+
   ret = MultiwayMerge(compact_file_abs_path, new_files);
   if (!ret.StatusNoError()) {
     return ret;
@@ -423,7 +568,7 @@ Status TCDB::IterMerge(
   }
 
   // TODO: Compact redundant entries.
-  // If output_buffer not empty, flush the last entries to a SST file even if
+  // If output_buffer not empty, flush the last entries to an SST file even if
   // the new SST file does not reach the kDefaultSSTFileSize limit.
   if (!output_buffer.empty()) {
     std::string file_basename;

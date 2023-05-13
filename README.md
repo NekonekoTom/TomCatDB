@@ -45,8 +45,12 @@ TomCatDB provides two build pipelines.
 
 # **Performance**
 - Write performance:
-
-  TomCatDB can process 100000 write operations in 0.235s on average.
+  When compiling with `-O2` optimization, TomCatDB's write performance is shown in the chart below.
+  | Data scale | Write time (second) | Estimated QPS |
+  | ---------- | ------------------- | ------------- |
+  | 100'000    | 0.13755             | 727000        |
+  | 500'000    | 1.31968             | 379000        |
+  | 1'000'000  | 4.47094             | 224000        |
 
 # **Others**
 ## TODO list

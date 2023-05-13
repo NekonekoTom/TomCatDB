@@ -83,6 +83,23 @@ class TCIO {
                        DataFileFormat::Footer& footer_content,
                        std::string& min_key, std::string& max_key);
 
+  // Read the Footers of a group of SST files.
+  // Return min/max keys and footer contents by reference
+  Status ReadSSTFooter(
+      const std::vector<std::string>& file_abs_path,
+      std::vector<DataFileFormat::Footer>& footer_contents,
+      std::vector<std::pair<std::string, std::string>>& min_max_keys);
+
+  // Read the Footer of the SST file and return min/max keys by reference
+  Status ReadSSTBoundary(const std::string& file_abs_path, std::string& min_key,
+                         std::string& max_key);
+
+  // Read the Footers of a group of SST files.
+  // Return min/max keys vector by reference
+  Status ReadSSTGroupBoundary(
+      const std::vector<std::string>& file_abs_path,
+      std::vector<std::pair<std::string, std::string>>& min_max_keys);
+
   // Read the IndexBlock of the SST file and store it in the memory
   Status ReadSSTIndex(const std::string& file_abs_path,
                       const DataFileFormat::Footer& footer_content,
