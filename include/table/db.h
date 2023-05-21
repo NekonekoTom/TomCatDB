@@ -137,6 +137,8 @@ class TCDB {
 
   TCTable* volatile_table_;
 
+  std::shared_ptr<Filter> filter_;
+
   TCIO io_;
 
   TCThreadPool worker_;

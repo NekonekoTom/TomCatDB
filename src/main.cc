@@ -60,10 +60,9 @@ int main() {
 
   Status why_status;
   std::string why;
-  // Big data test
-  // for (int circle = 0; circle < 200; ++circle) {
   clock_t begin = std::clock(), end;
-  for (int circle = 0; circle < 50; ++circle) {
+  // for (int circle = 0; circle < 20; ++circle) {
+  for (int circle = 0; circle < 5; ++circle) {
     for (int i = 0; i < records; ++i) {
       // db.Insert(csv_data[i][0] + "Circle-" + std::to_string(circle), csv_data[i][10]); // id and description
       why_status = db.Insert(csv_data[i][0] + "Circle-" + std::to_string(circle), csv_data[i][20]); // id and name

@@ -1,4 +1,5 @@
 #include "db_table.h"
+#include "filter.h"
 #include "format.h"
 #include "logger.h"
 #include "reader.h"
@@ -39,20 +40,35 @@ class TCIO {
   ~TCIO();
 
   Status WriteLevel0File(const TCTable* immutable,
-                         ManifestFormat::ManifestData& manifest);
+                         ManifestFormat::ManifestData& manifest,
+                         const std::shared_ptr<Filter>& filter);
 
-  // Different from the implementation of WriteLevel0File(), the caller determines
-  // the level of the new SST file. This function only returns the SST file name
-  // by reference. The caller function is responsible for collecting all changes
-  // and merging changes in one MANIFEST.
+  // Different from the implementation of WriteLevel0File(), the caller
+  // determines the level of the new SST file. This function only returns the
+  // SST file name by reference. The caller function is responsible for
+  // collecting all changes and merging changes in one MANIFEST.
   Status WriteNewSSTFile(const std::vector<Sequence>& entry_set,
                          std::string& file_basename);
+
+  // Mostly similar to the other version, but this one adds a bloom filter
+  // parameter.
+  Status WriteNewSSTFile(const std::vector<Sequence>& entry_set,
+                         std::string& file_basename,
+                         const std::shared_ptr<Filter>& filter);
 
   // Interface for MultiwayMerge().
   Status WriteMergeSSTFile(
       const std::vector<std::tuple<Sequence, int, int>>& item_set,
       std::string& file_basename,
       std::shared_ptr<MemAllocator>& merge_allocator);
+
+  // Mostly similar to the other version, but this one adds a bloom filter
+  // parameter.
+  Status WriteMergeSSTFile(
+      const std::vector<std::tuple<Sequence, int, int>>& item_set,
+      std::string& file_basename,
+      std::shared_ptr<MemAllocator>& merge_allocator,
+      const std::shared_ptr<Filter>& filter);
 
   // Update the Manifest file after merging.
   // Params:
@@ -100,6 +116,11 @@ class TCIO {
       const std::vector<std::string>& file_abs_path,
       std::vector<std::pair<std::string, std::string>>& min_max_keys);
 
+  // Read the FlexibleBlock of the SST file and return it by reference
+  Status ReadSSTFlexible(const std::string& file_abs_path,
+                         const DataFileFormat::Footer& footer_content,
+                         std::string& flexible_content);
+
   // Read the IndexBlock of the SST file and store it in the memory
   Status ReadSSTIndex(const std::string& file_abs_path,
                       const DataFileFormat::Footer& footer_content,
@@ -131,6 +152,18 @@ class TCIO {
   Status WriteSSTFile(const std::string& file_name,
                       const std::vector<Sequence>& entry_set);
 
+  // Write entry_set to specified SST file. Call vector<Sequence> version.
+  Status WriteSSTFile(const std::string& file_name,
+                      const std::vector<const char*>& entry_set,
+                      const std::shared_ptr<Filter>& filter);
+
+  // Write entry_set to specified SST file. This version implements a filter
+  // policy and the filter content will be written into the FlexibleBlock.
+  // Other parts of this version are the same as the vector<Sequence> version.
+  Status WriteSSTFile(const std::string& file_name,
+                      const std::vector<Sequence>& entry_set,
+                      const std::shared_ptr<Filter>& filter);
+
   // Write data blocks to SST file. Called by WriteSSTFile()
   Status WriteSSTData(std::shared_ptr<SequentialWriter>& sw_ptr,
                       const std::vector<Sequence>& entry_set,
@@ -143,7 +176,8 @@ class TCIO {
 
   // Write flexible to SST file. Called by WriteSSTFile()
   // TODO: crc-32?
-  Status WriteSSTFlexible(std::shared_ptr<SequentialWriter>& sw_ptr);
+  Status WriteSSTFlexible(std::shared_ptr<SequentialWriter>& sw_ptr,
+                          const std::string& flexible_content);
 
   // Deprecated
   Status WriteSSTFileFooter(std::shared_ptr<SequentialWriter>& sw_ptr,

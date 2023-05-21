@@ -4,6 +4,7 @@ TCDB::TCDB(const Config& config)
     : global_lock_(mutex_),
       comparator_(std::make_shared<InternalEntryComparator>()),
       volatile_table_(new TCTable(global_lock_, comparator_, 0)),
+      filter_(std::make_shared<TCBloomFilter>()),
       io_(config.GetConfig("database_dir"), global_lock_),
       query_buffer(std::make_shared<QueryAllocator>()) {
   // TODO: If the database already exists, read manifest and update file_id_
@@ -54,12 +55,15 @@ std::string TCDB::Get(const Sequence& key) {
   int level = 0;
   Sequence query_key(internal_entry, entry_size);
   while (result.size() == 0 && level < manifest.data_files.size()) {
-    // ret = SearchLevel(key, result, manifest, level++);
     ret = SearchLevel(query_key, result, manifest, level++);
   }
 
-  result = InternalEntry::EntryValue(result.data());
-  return std::string(result.data(), result.size());
+  if (result.size() == 0)
+    return std::string();
+  else {
+    result = InternalEntry::EntryValue(result.data());
+    return std::string(result.data(), result.size());
+  }
 }
 
 Status TCDB::Insert(const Sequence& key, const Sequence& value) {
@@ -124,7 +128,7 @@ Status TCDB::WriteLevel0() {
       return ret;
   }
 
-  ret = io_.WriteLevel0File(immutable, manifest);
+  ret = io_.WriteLevel0File(immutable, manifest, filter_);
 
   delete immutable;
 
@@ -505,7 +509,7 @@ Status TCDB::IterMerge(
       std::string file_basename;
       ret = io_.WriteMergeSSTFile(
           output_buffer, file_basename,
-          merge_allocator);  // Unref from the mem pool Here.
+          merge_allocator, filter_);  // Unref from the mem pool Here.
       if (!ret.StatusNoError()) {
         return ret;
       }
@@ -573,7 +577,7 @@ Status TCDB::IterMerge(
   if (!output_buffer.empty()) {
     std::string file_basename;
     ret = io_.WriteMergeSSTFile(output_buffer, file_basename,
-                                merge_allocator);  // Unref from the mem pool
+                                merge_allocator, filter_);  // Unref from the mem pool
     if (!ret.StatusNoError()) {
       return ret;
     }
@@ -613,7 +617,10 @@ Status TCDB::SearchLevel(const Sequence& query_key, Sequence& ret_entry,
       if (comp->LessOrEquals(query_key.data(), iter_max_entry.c_str()) &&
           comp->GreaterOrEquals(query_key.data(), iter_min_entry.c_str())) {
         // The query_key may be in the SST file
-        return GetFromSST(query_key, ret_entry, file_abs_path, footer);
+        ret = GetFromSST(query_key, ret_entry, file_abs_path, footer);
+        if (!ret.StatusNoError() || ret_entry.size() != 0) // Error occured or
+                                                           // found one record
+          return ret;
       }  // Else not in the range, continue.
     }
   } else {
@@ -643,6 +650,12 @@ Status TCDB::GetFromSST(const Sequence& query_key, Sequence& ret_entry,
                         const std::string& file_abs_path,
                         const DataFileFormat::Footer& footer) {
   Status ret;
+
+  auto query_key_value = InternalEntry::EntryKey(query_key.data());
+  std::string filter;
+  ret = io_.ReadSSTFlexible(file_abs_path, footer, filter);
+  if (!ret.StatusNoError() || !filter_->ContainsKey(query_key_value, filter))
+    return ret;
 
   std::vector<uint32_t> index_block;
   ret = io_.ReadSSTIndex(file_abs_path, footer, index_block);

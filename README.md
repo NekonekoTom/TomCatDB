@@ -56,7 +56,7 @@ TomCatDB provides two build pipelines.
 ## TODO list
 -[x] Build by CMake instead of makefile.
 
--[ ] Bloom filter.
+-[x] Bloom filter.
 
 -[ ] Multithread access.
 

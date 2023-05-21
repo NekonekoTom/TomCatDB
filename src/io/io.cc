@@ -33,7 +33,8 @@ TCIO::~TCIO() {
 }
 
 Status TCIO::WriteLevel0File(const TCTable* immutable,
-                             ManifestFormat::ManifestData& manifest) {
+                             ManifestFormat::ManifestData& manifest,
+                             const std::shared_ptr<Filter>& filter) {
   Status ret;
 
   // Write level0 file
@@ -45,7 +46,7 @@ Status TCIO::WriteLevel0File(const TCTable* immutable,
 
   ret = WriteSSTFile(
       neko_base::PathJoin(kDatabaseDir, file_basename + kSSTFilePostfix),
-      immutable->EntrySet());
+      immutable->EntrySet(), filter);
   if (!ret.StatusNoError()) {
     return ret;
   }
@@ -76,10 +77,49 @@ Status TCIO::WriteNewSSTFile(const std::vector<Sequence>& entry_set,
   return ret;
 }
 
+Status TCIO::WriteNewSSTFile(const std::vector<Sequence>& entry_set,
+                             std::string& file_basename,
+                             const std::shared_ptr<Filter>& filter) {
+  Status ret;
+
+  char file_basename_cstr[17] = {};
+  io_lock_.Lock();  // Protect the file_id_
+  sprintf(file_basename_cstr, "%016lX", file_id_++);
+  io_lock_.Unlock();
+
+  file_basename = std::string(file_basename_cstr);
+
+  ret = WriteSSTFile(
+      neko_base::PathJoin(kDatabaseDir, file_basename + kSSTFilePostfix),
+      entry_set, filter);
+
+  return ret;
+}
+
 Status TCIO::WriteMergeSSTFile(
     const std::vector<std::tuple<Sequence, int, int>>& item_set,
     std::string& file_basename,
     std::shared_ptr<MemAllocator>& merge_allocator) {
+  std::vector<Sequence> entry_set;
+  entry_set.reserve(item_set.size());
+
+  for (auto& i : item_set) {
+    merge_allocator->Unref(std::get<2>(i));
+    entry_set.push_back(std::get<0>(i));
+  }
+
+  Status ret = WriteNewSSTFile(entry_set, file_basename);
+
+  // Clear merge_allocator
+  merge_allocator->ReleaseIdleSpace();
+
+  return ret;
+}
+
+Status TCIO::WriteMergeSSTFile(
+    const std::vector<std::tuple<Sequence, int, int>>& item_set,
+    std::string& file_basename, std::shared_ptr<MemAllocator>& merge_allocator,
+    const std::shared_ptr<Filter>& filter) {
   std::vector<Sequence> entry_set;
   entry_set.reserve(item_set.size());
 
@@ -302,6 +342,25 @@ Status TCIO::ReadSSTGroupBoundary(
   return ret;
 }
 
+Status TCIO::ReadSSTFlexible(const std::string& file_abs_path,
+                             const DataFileFormat::Footer& footer,
+                             std::string& flexible_content) {
+  Status ret;
+
+  // Get a SequentialReader
+  io_lock_.Lock();
+  auto flex_reader = readers_.back();
+  readers_.pop_back();
+  io_lock_.Unlock();
+
+  flexible_content.clear();
+  ret = flex_reader->Read(new DBFile(file_abs_path), flexible_content,
+                          footer.flexible_blk_size,
+                          footer.data_blk_size + footer.index_blk_size);
+
+  return ret;
+}
+
 Status TCIO::ReadSSTIndex(const std::string& file_abs_path,
                           const DataFileFormat::Footer& footer,
                           std::vector<uint32_t>& data_blk_offset) {
@@ -456,6 +515,15 @@ Status TCIO::WriteManifest(const ManifestFormat::ManifestData& manifest) {
 }
 
 Status TCIO::WriteSSTFile(const std::string& file_name,
+                          const std::vector<const char*>& entry_set) {
+  std::vector<Sequence> seq_entries;
+  for (const char* e : entry_set) {
+    seq_entries.push_back(InternalEntry::EntryData(e));
+  }
+  return WriteSSTFile(file_name, seq_entries);
+}
+
+Status TCIO::WriteSSTFile(const std::string& file_name,
                           const std::vector<Sequence>& entry_set) {
   Status ret;
   std::vector<uint32_t> data_blk_offset;
@@ -483,7 +551,7 @@ Status TCIO::WriteSSTFile(const std::string& file_name,
 
   // Write FlexibleBlock
   uint32_t flexible_block_size = sizeof(uint32_t);  // TODO: crc-32?
-  ret = WriteSSTFlexible(sw);
+  ret = WriteSSTFlexible(sw, "TODO");
   if (!ret.StatusNoError()) {
     return ret;
   }
@@ -499,12 +567,62 @@ Status TCIO::WriteSSTFile(const std::string& file_name,
 }
 
 Status TCIO::WriteSSTFile(const std::string& file_name,
-                          const std::vector<const char*>& entry_set) {
+                          const std::vector<const char*>& entry_set,
+                          const std::shared_ptr<Filter>& filter) {
   std::vector<Sequence> seq_entries;
   for (const char* e : entry_set) {
     seq_entries.push_back(InternalEntry::EntryData(e));
   }
-  return WriteSSTFile(file_name, seq_entries);
+  return WriteSSTFile(file_name, seq_entries, filter);
+}
+
+Status TCIO::WriteSSTFile(const std::string& file_name,
+                          const std::vector<Sequence>& entry_set,
+                          const std::shared_ptr<Filter>& filter) {
+  Status ret;
+  std::vector<uint32_t> data_blk_offset;
+
+  // Pre-allocate space for index block
+  data_blk_offset.reserve(DataFileFormat::kApproximateSSTFileSize /
+                          DataFileFormat::kDefaultDataBlkSize);
+
+  std::shared_ptr<SequentialWriter> sw = std::make_shared<SequentialWriter>(
+      new DBFile(file_name, DBFile::Mode::kAppend), kDefaultWriterBufferSize);
+
+  // Write entries
+  uint32_t data_block_size = 0;
+  ret = WriteSSTData(sw, entry_set, data_blk_offset, data_block_size);
+  if (!ret.StatusNoError()) {
+    return ret;
+  }
+
+  // Write IndexBlock at once
+  uint32_t index_block_size = (data_blk_offset.size() + 1) * sizeof(uint32_t);
+  ret = WriteSSTIndex(sw, data_blk_offset);
+  if (!ret.StatusNoError()) {
+    return ret;
+  }
+
+  // Write FlexibleBlock
+  std::string filter_content;
+  ret = filter->CreateFilter(entry_set, filter_content);
+  if (!ret.StatusNoError()) {
+    return ret;
+  }
+  uint32_t flexible_block_size = filter_content.size();
+  ret = WriteSSTFlexible(sw, filter_content);  // TODO: crc-32?
+  if (!ret.StatusNoError()) {
+    return ret;
+  }
+
+  // Write Footer
+  ret = WriteSSTFileFooter(
+      sw, DataFileFormat::Footer(entry_set.front().size(),
+                                 data_block_size - entry_set.back().size(),
+                                 entry_set.back().size(), data_block_size,
+                                 index_block_size, flexible_block_size));
+
+  return ret;
 }
 
 Status TCIO::WriteSSTData(std::shared_ptr<SequentialWriter>& sw_ptr,
@@ -572,9 +690,11 @@ Status TCIO::WriteSSTIndex(std::shared_ptr<SequentialWriter>& sw_ptr,
   return ret;
 }
 
-Status TCIO::WriteSSTFlexible(std::shared_ptr<SequentialWriter>& sw_ptr) {
+Status TCIO::WriteSSTFlexible(std::shared_ptr<SequentialWriter>& sw_ptr,
+                              const std::string& flexible_content) {
   // TODO: crc-32
-  return sw_ptr->WriteFragment("TODO", 4);
+  return sw_ptr->WriteFragment(flexible_content.c_str(),
+                               flexible_content.size());
 }
 
 Status TCIO::WriteSSTFileFooter(std::shared_ptr<SequentialWriter>& sw_ptr,
