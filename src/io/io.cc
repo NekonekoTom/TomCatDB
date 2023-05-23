@@ -128,7 +128,7 @@ Status TCIO::WriteMergeSSTFile(
     entry_set.push_back(std::get<0>(i));
   }
 
-  Status ret = WriteNewSSTFile(entry_set, file_basename);
+  Status ret = WriteNewSSTFile(entry_set, file_basename, filter);
 
   // Clear merge_allocator
   merge_allocator->ReleaseIdleSpace();
@@ -201,12 +201,12 @@ Status TCIO::ReadManifest(ManifestFormat::ManifestData& manifest) {
     return Status::FileIOError("No available Reader.");
   }
 
-  std::shared_ptr<SequentialReader> reader = readers_.back();
+  auto manifest_reader = readers_.back();
   readers_.pop_back();
   io_lock_.Unlock();
 
   std::string manifest_content;
-  ret = reader->ReadEntire(
+  ret = manifest_reader->ReadEntire(
       new DBFile(neko_base::PathJoin(kDatabaseDir, kManifestFilename),
                  DBFile::Mode::kReadOnly),
       manifest_content);
@@ -216,7 +216,7 @@ Status TCIO::ReadManifest(ManifestFormat::ManifestData& manifest) {
 
   // Push the SequentialReader object back to reader_ before return
   io_lock_.Lock();
-  readers_.push_back(reader);
+  readers_.push_back(manifest_reader);
   io_lock_.Unlock();
 
   return ret;
@@ -241,17 +241,16 @@ Status TCIO::ReadSSTFooter(const std::string& file_abs_path,
   ret = footer_reader->Read(new DBFile(file_abs_path), footer_content,
                             DataFileFormat::kSSTFooterSize,
                             size - DataFileFormat::kSSTFooterSize);
-  if (!ret.StatusNoError())
-    return ret;
-
-  // Return values
-  footer = DataFileFormat::Footer(footer_content.c_str());
+  if (ret.StatusNoError()) {
+    // Return values
+    footer = DataFileFormat::Footer(footer_content.c_str());
+  }
 
   io_lock_.Lock();
   readers_.push_back(footer_reader);
   io_lock_.Unlock();
 
-  return Status::NoError();
+  return ret;
 }
 
 Status TCIO::ReadSSTFooter(const std::string& file_abs_path,
@@ -273,26 +272,24 @@ Status TCIO::ReadSSTFooter(const std::string& file_abs_path,
   ret = footer_reader->Read(new DBFile(file_abs_path), footer_content,
                             DataFileFormat::kSSTFooterSize,
                             size - DataFileFormat::kSSTFooterSize);
-  if (!ret.StatusNoError())
-    return ret;
 
-  // Return values
-  footer = DataFileFormat::Footer(footer_content.c_str());
+  if (ret.StatusNoError()) {
+    // Return values
+    footer = DataFileFormat::Footer(footer_content.c_str());
+    ret = footer_reader->Read(new DBFile(file_abs_path), min_key,
+                              footer.min_key_size, 0);
+  }
 
-  ret = footer_reader->Read(new DBFile(file_abs_path), min_key,
-                            footer.min_key_size, 0);
-  if (!ret.StatusNoError())
-    return ret;
-  ret = footer_reader->Read(new DBFile(file_abs_path), max_key,
-                            footer.max_key_size, footer.max_key_offset);
-  if (!ret.StatusNoError())
-    return ret;
+  if (ret.StatusNoError()) {
+    ret = footer_reader->Read(new DBFile(file_abs_path), max_key,
+                              footer.max_key_size, footer.max_key_offset);
+  }
 
   io_lock_.Lock();
   readers_.push_back(footer_reader);
   io_lock_.Unlock();
 
-  return Status::NoError();
+  return ret;
 }
 
 Status TCIO::ReadSSTFooter(
@@ -358,6 +355,10 @@ Status TCIO::ReadSSTFlexible(const std::string& file_abs_path,
                           footer.flexible_blk_size,
                           footer.data_blk_size + footer.index_blk_size);
 
+  io_lock_.Lock();
+  readers_.push_back(flex_reader);
+  io_lock_.Unlock();
+
   return ret;
 }
 
@@ -375,16 +376,15 @@ Status TCIO::ReadSSTIndex(const std::string& file_abs_path,
   std::string index_content;
   ret = index_reader->Read(new DBFile(file_abs_path), index_content,
                            footer.index_blk_size, footer.data_blk_size);
-  if (!ret.StatusNoError())
-    return ret;
+  if (ret.StatusNoError()) {
+    const uint32_t* index_ptr =
+        reinterpret_cast<const uint32_t*>(index_content.c_str());
+    uint32_t data_blk_count = *index_ptr;
 
-  const uint32_t* index_ptr =
-      reinterpret_cast<const uint32_t*>(index_content.c_str());
-  uint32_t data_blk_count = *index_ptr;
-
-  ++index_ptr;
-  for (int i = 0; i < data_blk_count; ++i) {
-    data_blk_offset.push_back(*index_ptr++);
+    ++index_ptr;
+    for (int i = 0; i < data_blk_count; ++i) {
+      data_blk_offset.push_back(*index_ptr++);
+    }
   }
 
   io_lock_.Lock();
@@ -412,34 +412,34 @@ Status TCIO::ReadSSTDataBlock(const std::string& file_abs_path,
   std::string data_content;
   ret = data_reader->Read(new DBFile(file_abs_path), data_content, block_size,
                           block_offset);
-  if (!ret.StatusNoError())
-    return ret;
 
-  // Copy the content of the DataBlock from the stack to the MemAllocator
-  char* data_block = nullptr;
-  if (reuse_block_id == -1) {
-    // Do not reallocate memory
-    data_block = merge_allocator->Allocate(data_content.size());
-  } else {
-    data_block =
-        merge_allocator->Reallocate(data_content.size(), reuse_block_id);
-  }
-  if (!data_block)
-    return Status::FileIOError(
-        "Memory in MemAllocator/MergeAllocator not allocated.");
-  std::memcpy(data_block, data_content.c_str(), data_content.size());
+  if (ret.StatusNoError()) {
+    // Copy the content of the DataBlock from the stack to the MemAllocator
+    char* data_block = nullptr;
+    if (reuse_block_id == -1) {
+      // Do not reallocate memory
+      data_block = merge_allocator->Allocate(data_content.size());
+    } else {
+      data_block =
+          merge_allocator->Reallocate(data_content.size(), reuse_block_id);
+    }
+    if (!data_block)
+      return Status::FileIOError(
+          "Memory in MemAllocator/MergeAllocator not allocated.");
+    std::memcpy(data_block, data_content.c_str(), data_content.size());
 
-  auto data_offset = static_cast<std::string::size_type>(0);
-  while (data_offset < data_content.size()) {
-    entry_set.push_back(InternalEntry::EntryData(data_block + data_offset));
-    data_offset += entry_set.back().size();
-  }
+    auto data_offset = static_cast<std::string::size_type>(0);
+    while (data_offset < data_content.size()) {
+      entry_set.push_back(InternalEntry::EntryData(data_block + data_offset));
+      data_offset += entry_set.back().size();
+    }
 
-  // Update reference counter at once
-  if (reuse_block_id == -1) {
-    merge_allocator->RefLast(entry_set.size() - 1);
-  } else {
-    merge_allocator->RefBlock(entry_set.size() - 1, reuse_block_id);
+    // Update reference counter at once
+    if (reuse_block_id == -1) {
+      merge_allocator->RefLast(entry_set.size() - 1);
+    } else {
+      merge_allocator->RefBlock(entry_set.size() - 1, reuse_block_id);
+    }
   }
 
   io_lock_.Lock();

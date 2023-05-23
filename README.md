@@ -52,6 +52,14 @@ TomCatDB provides two build pipelines.
   | 500'000    | 1.31968             | 379000        |
   | 1'000'000  | 4.47094             | 224000        |
 
+<!-- - Read performance (before optimization):
+  Sequential read (all requests are for existing key-values):
+  | Data scale | Read time (second)  | Estimated QPS |
+  | ---------- | ------------------- | ------------- |
+  | 100'000    | 5.04919             | 20000         |
+  | 500'000    | 45.7459             | 11000         |
+  | 1'000'000  | 170.361             | 6000          | -->
+
 # **Others**
 ## TODO list
 -[x] Build by CMake instead of makefile.

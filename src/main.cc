@@ -64,9 +64,10 @@ int main() {
   // for (int circle = 0; circle < 20; ++circle) {
   for (int circle = 0; circle < 5; ++circle) {
     for (int i = 0; i < records; ++i) {
-      // db.Insert(csv_data[i][0] + "Circle-" + std::to_string(circle), csv_data[i][10]); // id and description
-      why_status = db.Insert(csv_data[i][0] + "Circle-" + std::to_string(circle), csv_data[i][20]); // id and name
-      if (!why_status.StatusNoError()) std::cout << i << why_status.ErrMsg() << std::endl;
+      db.Insert(csv_data[i][0] + "Circle-" + std::to_string(circle), csv_data[i][10]); // id and description
+      // why_status = db.Insert(csv_data[i][0] + "Circle-" + std::to_string(circle), csv_data[i][20]); // id and name
+      if (!why_status.StatusNoError())
+        std::cout << i << why_status.ErrMsg() << std::endl;
       // db.Insert(csv_data[i][0], csv_data[i][10]); // id and description
       // db.Insert(csv_data[i][0], csv_data[i][20]);  // id and name
     }
@@ -77,18 +78,26 @@ int main() {
   
   std::cout << "Write time: " + std::to_string(write_time) + " ms\n";
 
+  auto get_test = db.Get(Sequence("idCircle-1"));
+
+  std::cout << "Get: " << get_test << std::endl;
+
   // Error get test
+  begin = std::clock();
   int error = 0;
   for (int circle = 0; circle < 5; ++circle) {
     for (int i = 0; i < records; ++i) {
       auto test_key = csv_data[i][0] + "Circle-" + std::to_string(circle);
       why = db.Get(test_key); // id and description
-      if (why.empty()) {
-        db.Log("Try to get key [" + test_key + "] error. Result empty.");
-        ++error;
-      }
+      // if (why.empty()) {
+      //   db.Log("Try to get key [" + test_key + "] error. Result empty.");
+      //   ++error;
+      // }
     }
   }
+  end = std::clock();
+  auto read_time = static_cast<double>(end - begin) / CLOCKS_PER_SEC * 1000; // in ms
+  std::cout << "Read time: " + std::to_string(read_time) + " ms\n";
 
   int correct = 0;
   for (int i = 0; i < 20; ++i) {

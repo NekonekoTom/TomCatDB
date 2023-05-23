@@ -38,7 +38,7 @@ class Status {
   Status(Code err_type, const std::string& err_msg = std::string())
       : err_type_(err_type), err_msg_(err_msg) {}
 
-  Code err_type_;
+  Code err_type_ = kOk;
   std::string err_msg_;
 };
 

@@ -27,7 +27,9 @@ std::string TCDB::Get(const Sequence& key) {
   // // TODO: Allocate on LRUCache and MemAllocator
 
   uint64_t entry_size = coding::SizeOfVarint(key.size()) + key.size() + 9;
-  char* internal_entry = query_buffer->Allocate(entry_size);
+  std::string query_entry(entry_size, 0);
+  // char* internal_entry = query_buffer->Allocate(entry_size);
+  char* internal_entry = const_cast<char*>(query_entry.c_str());
 
   // The value, ID, and op_type are invalid
   Status enc = InternalEntry::EncodeInternal(
@@ -152,7 +154,8 @@ Status TCDB::BackgroundCompact(ManifestFormat::ManifestData& manifest) {
     if (manifest.data_files[i].size() >= kDefaultLevelSize[i]) {
       // ret = CompactSST(manifest, i, 0);  // TODO: Each compaction should compact
       //                                    // all files that exceed the limit.
-      int exceed_files = manifest.data_files[i].size() - kDefaultLevelSize[i] + 1;
+      int exceed_files =
+          manifest.data_files[i].size() - kDefaultLevelSize[i] + 1;
       std::vector<int> file_nums(exceed_files);
       for (int i = 0; i < exceed_files; ++i)
         file_nums[i] = i;
@@ -507,9 +510,8 @@ Status TCDB::IterMerge(
     current_sst_size += std::get<0>(pq_item).size();
     if (current_sst_size >= kDefaultSSTFileSize) {
       std::string file_basename;
-      ret = io_.WriteMergeSSTFile(
-          output_buffer, file_basename,
-          merge_allocator, filter_);  // Unref from the mem pool Here.
+      ret = io_.WriteMergeSSTFile(output_buffer, file_basename, merge_allocator,
+                                  filter_);  // Unref from the mem pool Here.
       if (!ret.StatusNoError()) {
         return ret;
       }
@@ -576,8 +578,8 @@ Status TCDB::IterMerge(
   // the new SST file does not reach the kDefaultSSTFileSize limit.
   if (!output_buffer.empty()) {
     std::string file_basename;
-    ret = io_.WriteMergeSSTFile(output_buffer, file_basename,
-                                merge_allocator, filter_);  // Unref from the mem pool
+    ret = io_.WriteMergeSSTFile(output_buffer, file_basename, merge_allocator,
+                                filter_);  // Unref from the mem pool
     if (!ret.StatusNoError()) {
       return ret;
     }
@@ -618,8 +620,8 @@ Status TCDB::SearchLevel(const Sequence& query_key, Sequence& ret_entry,
           comp->GreaterOrEquals(query_key.data(), iter_min_entry.c_str())) {
         // The query_key may be in the SST file
         ret = GetFromSST(query_key, ret_entry, file_abs_path, footer);
-        if (!ret.StatusNoError() || ret_entry.size() != 0) // Error occured or
-                                                           // found one record
+        if (!ret.StatusNoError() || ret_entry.size() != 0)  // Error occured or
+                                                            // found one record
           return ret;
       }  // Else not in the range, continue.
     }
