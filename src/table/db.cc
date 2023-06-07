@@ -2,15 +2,20 @@
 
 TCDB::TCDB(const Config& config)
     : global_lock_(mutex_),
-      comparator_(std::make_shared<InternalEntryComparator>()),
-      volatile_table_(new TCTable(global_lock_, comparator_, 0)),
-      filter_(std::make_shared<TCBloomFilter>()),
-      io_(config.GetConfig("database_dir"), global_lock_),
-      query_buffer(std::make_shared<QueryAllocator>()) {
+      io_(config.GetConfig("database_dir"), global_lock_) {
   // TODO: If the database already exists, read manifest and update file_id_
   //       and entry_id_.
 
-  cache = std::make_shared<LRUCache<Sequence, Sequence, SeqHash, SeqEqual>>();
+  comparator_ = std::make_shared<InternalEntryComparator>();
+
+  volatile_table_ = new TCTable(global_lock_, comparator_, 0);
+
+  filter_ = std::make_shared<TCBloomFilter>();
+
+  cache_ = std::make_shared<LRUCache<Sequence, Sequence, SeqHash, SeqEqual>>();
+
+  // TODO: Unnecessary?
+  query_buffer_ = std::make_shared<QueryAllocator>();
 }
 
 TCDB::~TCDB() {
@@ -28,7 +33,7 @@ std::string TCDB::Get(const Sequence& key) {
 
   uint64_t entry_size = coding::SizeOfVarint(key.size()) + key.size() + 9;
   std::string query_entry(entry_size, 0);
-  // char* internal_entry = query_buffer->Allocate(entry_size);
+  // char* internal_entry = query_buffer_->Allocate(entry_size);
   char* internal_entry = const_cast<char*>(query_entry.c_str());
 
   // The value, ID, and op_type are invalid
@@ -684,7 +689,7 @@ Status TCDB::GetFromSST(const Sequence& query_key, Sequence& ret_entry,
       return ret;
     for (auto& e : entry_set) {  // Ascending order
       if (comp->Equal(e.data(), query_key.data())) {
-        char* ret_entry_ptr = query_buffer->Allocate(e.size());
+        char* ret_entry_ptr = query_buffer_->Allocate(e.size());
         std::memcpy(ret_entry_ptr, e.data(), e.size());
         ret_entry = Sequence(ret_entry_ptr, e.size());
         return ret;
