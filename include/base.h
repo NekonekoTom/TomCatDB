@@ -14,6 +14,8 @@
 #include <thread>
 #include <vector>
 
+#include "status.h"
+
 // typedef unsigned long U_LONG;
 using U_LONG = unsigned long;
 
