@@ -145,7 +145,7 @@ class TCDB {
 
   // Cache module for the keys and values. Both key and value should be of type
   // Sequence, the Cache is in charge of underlying storage for the Sequence.
-  std::shared_ptr<Cache<Sequence, Sequence>> cache_;
+  std::shared_ptr<TCCache> query_cache_;
 
   std::shared_ptr<MemAllocator> query_buffer_;
 };

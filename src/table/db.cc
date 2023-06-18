@@ -12,7 +12,7 @@ TCDB::TCDB(const Config& config)
 
   filter_ = std::make_shared<TCBloomFilter>();
 
-  cache_ = std::make_shared<LRUCache<Sequence, Sequence, SeqHash, SeqEqual>>();
+  query_cache_ = std::make_shared<TCCache>();  // Default cache size
 
   // TODO: Unnecessary?
   query_buffer_ = std::make_shared<QueryAllocator>();
@@ -24,16 +24,14 @@ TCDB::~TCDB() {
 }
 
 std::string TCDB::Get(const Sequence& key) {
-  // TODO
-
-  // // Make a virtual entry in the cache.
-  // // If the entry does not exist, evict it later
-  // // TODO: Evict
-  // // TODO: Allocate on LRUCache and MemAllocator
+  // Try to get the value from the cache
+  std::string v_cache;
+  if (query_cache_->Get(key, v_cache)) {
+    return v_cache;
+  }
 
   uint64_t entry_size = coding::SizeOfVarint(key.size()) + key.size() + 9;
   std::string query_entry(entry_size, 0);
-  // char* internal_entry = query_buffer_->Allocate(entry_size);
   char* internal_entry = const_cast<char*>(query_entry.c_str());
 
   // The value, ID, and op_type are invalid
@@ -74,10 +72,14 @@ std::string TCDB::Get(const Sequence& key) {
 }
 
 Status TCDB::Insert(const Sequence& key, const Sequence& value) {
-  // TODO
   Status ret;
 
   // TODO: MVCC
+
+  // First insert the k-v pair into the cache
+  if (!query_cache_->Insert(key, value)) {
+    return Status::UndefinedError("Cache insertion operation failed");
+  }
 
   if (volatile_table_->MemUsage() >= kDefaultSSTFileSize) {
     // WriteLevel0
@@ -94,6 +96,12 @@ Status TCDB::Insert(const Sequence& key, const Sequence& value) {
 
 Status TCDB::Delete(const Sequence& key) {
   // TODO
+
+  // First delete the k-v pair from the cache
+  if (!query_cache_->Delete(key)) {
+    return Status::UndefinedError("Cache deletion operation failed");
+  }
+
   return volatile_table_->Delete(key);
 }
 

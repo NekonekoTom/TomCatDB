@@ -70,4 +70,4 @@ TomCatDB provides two build pipelines.
 
 -[ ] More functions for TCLogger.
 
--[ ] LRU Cache.
+-[x] LRU Cache.
