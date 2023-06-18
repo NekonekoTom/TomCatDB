@@ -1,6 +1,5 @@
 build
 db
 test_data
-test
-main
+bin/*
 *.tdb

@@ -11,7 +11,7 @@ foreach(FD ${FOLDERS})
   aux_source_directory(${FD} MODULE_LIST)
 endforeach(FD)
 
-# Find all source files and store basename without extension in BASE_NAME_NOEXT
+# Find all source files and store basenames without extension in BASE_NAME_NOEXT
 foreach(MODULE ${MODULE_LIST})
   # message(${MODULE})
   string(REGEX REPLACE ".+/" "" BASE_NAME ${MODULE})
@@ -35,3 +35,6 @@ target_link_libraries(
   pthread
 )
 # target_link_libraries(main coding io table)
+
+# Test for modules
+add_subdirectory("test")

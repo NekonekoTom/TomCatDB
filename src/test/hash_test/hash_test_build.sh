@@ -1,0 +1,2 @@
+g++ -c filter.cc -o filter.o -g -I /home/tom_cat/workdir/private/CS/C++/Primer/TomCatDB/include/coding -I /home/tom_cat/workdir/private/CS/C++/Primer/TomCatDB/include -I /home/tom_cat/workdir/private/CS/C++/Primer/TomCatDB/include/util
+g++ hash_test.cc filter.o -o hash_test -g -I /home/tom_cat/workdir/private/CS/C++/Primer/TomCatDB/include/coding -I /home/tom_cat/workdir/private/CS/C++/Primer/TomCatDB/include -I /home/tom_cat/workdir/private/CS/C++/Primer/TomCatDB/include/util
