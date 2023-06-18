@@ -45,12 +45,12 @@ char* MemAllocator::Reallocate(const uint64_t size, const int block_id) {
   return nullptr;
 }
 
-void MemAllocator::Ref(const std::vector<char*>::size_type block_id) {
+void MemAllocator::Ref(const uint32_t block_id) {
   if (block_id < ref.size())
     ++ref[block_id];
 }
 
-const int MemAllocator::Unref(const std::vector<char*>::size_type block_id) {
+const int MemAllocator::Unref(const uint32_t block_id) {
   if (block_id < ref.size())
     return --ref[block_id];
   else
@@ -83,4 +83,12 @@ char* MergeAllocator::Reallocate(const uint64_t size, const int block_id) {
   ++ref[block_id];
 
   return block_ptr_[block_id];
+}
+
+char* CacheAllocator::Allocate(const uint64_t size, uint32_t& block_id) {
+  char* ret = Allocate(size);
+
+  block_id = this->block_ptr_.size() - 1;
+
+  return ret;  
 }

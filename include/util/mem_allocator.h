@@ -13,18 +13,14 @@ class MemAllocator {
   // internal fragmentation, a new full block will be allocated.
   const uint64_t kMaxSectorSize;
 
-  // // Max (request_size > remaining_size_) times.
-  // // The leftover space will be discarded and a fresh new block will be allocated
-  // const int kMaxAllocFailTimes = 4;
-
   MemAllocator() : kMaxSectorSize(kDefaultBlockSize / 2) {
-    start_addr_ = AllocateFullBlock(kDefaultBlockSize);
+    InitAllocator();
   }
 
   explicit MemAllocator(const uint64_t default_block_size)
       : kDefaultBlockSize(default_block_size),
         kMaxSectorSize(kDefaultBlockSize / 2) {
-    start_addr_ = AllocateFullBlock(kDefaultBlockSize);
+    InitAllocator();
   }
 
   MemAllocator(const MemAllocator&) = delete;
@@ -39,13 +35,13 @@ class MemAllocator {
   // Deprecate the old data in block[block_id] and reallocate a new block
   virtual char* Reallocate(const uint64_t size, const int block_id);
 
-  void Ref(const std::vector<char*>::size_type block_id);
+  void Ref(const uint32_t block_id);
 
-  const int Unref(const std::vector<char*>::size_type block_id);
+  const int Unref(const uint32_t block_id);
 
   void RefLast(const int times) { ref.back() += times; }
 
-  void RefBlock(const int times, const std::vector<char*>::size_type block_id) {
+  void RefBlock(const int times, const uint32_t block_id) {
     ref[block_id] += times;
   }
 
@@ -67,16 +63,18 @@ class MemAllocator {
 
   std::vector<char*> block_ptr_;
   std::vector<int> ref;
+
+ private:
+  void InitAllocator() {
+    start_addr_ = AllocateFullBlock(kDefaultBlockSize);
+    Unref(0);  // When allocating the first block, ref[0] will be increased but
+               // not actually reffed by any data.
+  }
 };
 
 class MergeAllocator : public MemAllocator {
  public:
-  // MergeAllocator() : MemAllocator(0) { block_size.push_back(0); }
   MergeAllocator() : MemAllocator(0) {}
-
-  // Removed
-  // explicit MergeAllocator(const uint64_t default_block_size)
-  //     : MemAllocator(default_block_size) {}
 
   MergeAllocator(const MergeAllocator&) = delete;
   MergeAllocator& operator=(const MergeAllocator&) = delete;
@@ -90,11 +88,6 @@ class MergeAllocator : public MemAllocator {
 
   // Deprecate the old data in block[block_id] and reallocate a new block
   virtual char* Reallocate(const uint64_t size, const int block_id);
-
- private:
-  // // Record the size of each block. This property is designed to calculate which
-  // // block a char* ptr (start address of a Sequence) belongs to.
-  // std::vector<uint64_t> block_size;
 };
 
 class QueryAllocator : public MemAllocator {
@@ -109,6 +102,23 @@ class QueryAllocator : public MemAllocator {
   virtual ~QueryAllocator() {}
 
   char* Allocate(const uint64_t size) { return MemAllocator::Allocate(size); }
+};
+
+class CacheAllocator : public MemAllocator {
+ public:
+  CacheAllocator() : MemAllocator() {}
+  explicit CacheAllocator(const uint64_t default_block_size)
+      : MemAllocator(default_block_size) {}
+
+  CacheAllocator(const CacheAllocator&) = delete;
+  CacheAllocator& operator=(const CacheAllocator&) = delete;
+
+  virtual ~CacheAllocator() {}
+
+  char* Allocate(const uint64_t size) { return MemAllocator::Allocate(size); }
+
+  // Allocate the requested size of space and return block_id by reference
+  char* Allocate(const uint64_t size, uint32_t& block_id);
 };
 
 #endif
