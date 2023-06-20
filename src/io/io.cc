@@ -491,25 +491,7 @@ Status TCIO::WriteManifest(const ManifestFormat::ManifestData& manifest) {
                  DBFile::Mode::kNewFile),
       kDefaultWriterBufferSize);
 
-  ret = sw->WriteFragment(manifest.path_to_manifest + "\n");
-  if (!ret.StatusNoError())
-    return ret;
-
-  ret = sw->WriteFragment(manifest.path_to_log + "\n");
-  if (!ret.StatusNoError())
-    return ret;
-
-  for (int level = 0; level < manifest.data_files.size(); ++level) {
-    std::string line;
-    for (auto f : manifest.data_files[level]) {
-      line += f + ';';
-    }
-    if (line.empty())
-      line.push_back('\n');
-    else
-      line.back() = '\n';
-    ret = sw->WriteFragment(line);
-  }
+  ret = sw->WriteFragment(ManifestFormat::Encode(manifest));
 
   return ret;
 }

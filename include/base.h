@@ -5,13 +5,16 @@
 
 #include <stdint.h>   // For uint_t
 #include <algorithm>  // For std::remove
+#include <atomic>     // For std::atomic
 #include <cassert>    // For assert
 #include <cmath>
 #include <cstring>    // For std::memcpy
+#include <list>
 #include <memory>
 #include <mutex>      // For concurrency control
 #include <queue>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "status.h"

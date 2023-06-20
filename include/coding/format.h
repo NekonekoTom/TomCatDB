@@ -32,13 +32,16 @@ class ManifestFormat : public FileFormat {
   ~ManifestFormat() = default;
 
   // Decode std::string to ManifestData. DO NOT check legality.
-  static ManifestData Decode(const std::string& manifest);
+  static ManifestData Decode(const std::string& manifest_str);
 
-  // TODO
-  static void Encode();
+  // Encode ManifestData to std::string. The content of the std::string is the
+  // same as the MANIFEST text file.
+  static std::string Encode(const ManifestData& manifest);
 
  private:
 };
+
+using Manifest = ManifestFormat::ManifestData;
 
 // TODO
 // Log file format as:
