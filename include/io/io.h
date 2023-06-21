@@ -40,7 +40,7 @@ class TCIO {
   ~TCIO();
 
   Status WriteLevel0File(const TCTable* immutable,
-                         ManifestFormat::ManifestData& manifest,
+                         Manifest& manifest,
                          const std::shared_ptr<Filter>& filter);
 
   // Different from the implementation of WriteLevel0File(), the caller
@@ -82,13 +82,13 @@ class TCIO {
   //   insert_index: new files will be inserted on the insert_index. Files
   //                 smaller than the new files are at [0, insert_index).
   Status UpdateManifest(
-      ManifestFormat::ManifestData& old_manifest,
+      Manifest& old_manifest,
       const std::vector<std::pair<int, int>>& compact_file_index,
       const std::vector<std::string>& new_files, const int current_level,
       const int insert_index);
 
   // Read MANIFEST file at kDatabaseDir/kManifestFilename
-  Status ReadManifest(ManifestFormat::ManifestData& read_status);
+  Status ReadManifest(Manifest& read_status);
 
   // Read the Footer of the SST file and store it in the memory
   Status ReadSSTFooter(const std::string& file_abs_path,
@@ -142,7 +142,7 @@ class TCIO {
   Status BuildMetadataFile();
 
   // Write manifest content to MANIFEST file at kDatabaseDir/kManifestFilename
-  Status WriteManifest(const ManifestFormat::ManifestData& read_status);
+  Status WriteManifest(const Manifest& read_status);
 
   // Write entry_set to specified SST file. Call vector<Sequence> version.
   Status WriteSSTFile(const std::string& file_name,

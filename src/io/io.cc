@@ -33,7 +33,7 @@ TCIO::~TCIO() {
 }
 
 Status TCIO::WriteLevel0File(const TCTable* immutable,
-                             ManifestFormat::ManifestData& manifest,
+                             Manifest& manifest,
                              const std::shared_ptr<Filter>& filter) {
   Status ret;
 
@@ -137,13 +137,13 @@ Status TCIO::WriteMergeSSTFile(
 }
 
 Status TCIO::UpdateManifest(
-    ManifestFormat::ManifestData& old_manifest,
+    Manifest& old_manifest,
     const std::vector<std::pair<int, int>>& compact_file_index,
     const std::vector<std::string>& new_files, const int current_level,
     const int insert_index) {
   Status ret;
 
-  ManifestFormat::ManifestData manifest = old_manifest;
+  Manifest manifest = old_manifest;
 
   // Delete the compacted files from the manifest
   // Clean current level
@@ -192,7 +192,7 @@ Status TCIO::UpdateManifest(
   return ret;
 }
 
-Status TCIO::ReadManifest(ManifestFormat::ManifestData& manifest) {
+Status TCIO::ReadManifest(Manifest& manifest) {
   Status ret;
 
   io_lock_.Lock();  // TODO: Blocking queue?
@@ -482,7 +482,7 @@ Status TCIO::BuildMetadataFile() {
   return ret;
 }
 
-Status TCIO::WriteManifest(const ManifestFormat::ManifestData& manifest) {
+Status TCIO::WriteManifest(const Manifest& manifest) {
   // TODO: File lock?
 
   Status ret;
