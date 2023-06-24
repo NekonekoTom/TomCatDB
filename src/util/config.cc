@@ -2,6 +2,8 @@
 
 Config::Config() {
   AddOrUpdateConfig("database_dir", kDefaultDatabaseDir);
+  AddOrUpdateConfig("default_core_thread_num", kDefaultThreadPoolCoreNum);
+  AddOrUpdateConfig("max_task_queue_size", kDefaultMaxTaskQueueSize);
 }
 
 Config::~Config() {}

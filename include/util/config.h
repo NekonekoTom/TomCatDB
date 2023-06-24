@@ -18,6 +18,10 @@ class Config {
   const std::string kDefaultDatabaseDir =
       "/home/tom_cat/workdir/private/CS/C++/Primer/TomCatDB/db";
 
+  const std::string kDefaultThreadPoolCoreNum = "4";
+
+  const std::string kDefaultMaxTaskQueueSize = "10";
+
   std::unordered_map<std::string, std::string> config_;
 };
 
