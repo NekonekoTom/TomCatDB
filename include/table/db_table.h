@@ -4,7 +4,7 @@
 #include "comparator.h"
 #include "internal_entry.h"
 #include "mem_allocator.h"
-#include "raii_lock.h"
+#include "lock_util.h"
 #include "skiplist.h"
 #include "status.h"
 
@@ -56,7 +56,8 @@ class TCTable {
 //   MemAllocator* const query_allocator_;
   std::shared_ptr<MemAllocator> query_allocator_;
 
-  uint64_t entry_id_ = 0;  // TODO: The entry_id_ should be globally unique
+  // uint64_t entry_id_ = 0;  // TODO: The entry_id_ should be globally unique
+  std::atomic<uint64_t> entry_id_;  // TODO: The entry_id_ should be globally unique
 
   RAIILock& table_lock_;
 };

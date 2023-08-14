@@ -1,7 +1,7 @@
 #include "io.h"
 
-TCIO::TCIO(const std::string& files_dir, RAIILock& io_lock)
-    : kDatabaseDir(files_dir), io_lock_(io_lock) {
+TCIO::TCIO(const std::string& files_dir)
+    : kDatabaseDir(files_dir), io_lock_(io_mutex_) {
   // If the kDatabaseDir does not exist or does not have rwx permissions
   int stat = access(kDatabaseDir.c_str(), F_OK | W_OK | X_OK);
   while (stat != 0) {
@@ -32,8 +32,7 @@ TCIO::~TCIO() {
   // don't need to delete.
 }
 
-Status TCIO::WriteLevel0File(const TCTable* immutable,
-                             Manifest& manifest,
+Status TCIO::WriteLevel0File(const TCTable* immutable, Manifest& manifest,
                              const std::shared_ptr<Filter>& filter) {
   Status ret;
 
@@ -440,6 +439,49 @@ Status TCIO::ReadSSTDataBlock(const std::string& file_abs_path,
     } else {
       merge_allocator->RefBlock(entry_set.size() - 1, reuse_block_id);
     }
+  }
+
+  io_lock_.Lock();
+  readers_.push_back(data_reader);
+  io_lock_.Unlock();
+
+  return ret;
+}
+
+Status TCIO::ReadSSTDataAll(const std::string& file_abs_path,
+                            std::shared_ptr<MemAllocator>& merge_allocator,
+                            std::vector<Sequence>& entry_set,
+                            const uint64_t size, const ::ssize_t offset) {
+  Status ret;
+
+  // Get a SequentialReader
+  io_lock_.Lock();
+  auto data_reader = readers_.back();
+  readers_.pop_back();
+  io_lock_.Unlock();
+
+  // Read DataBlock
+  std::string data_content;
+  ret =
+      data_reader->Read(new DBFile(file_abs_path), data_content, size, offset);
+
+  if (ret.StatusNoError()) {
+    // Copy the content of the DataBlock from the stack to the MemAllocator
+    char* sst_data = nullptr;
+    sst_data = merge_allocator->Allocate(data_content.size());
+    if (!sst_data)
+      return Status::FileIOError(
+          "Memory in MemAllocator/MergeAllocator not allocated.");
+    std::memcpy(sst_data, data_content.c_str(), data_content.size());
+
+    auto data_offset = static_cast<std::string::size_type>(0);
+    while (data_offset < data_content.size()) {
+      entry_set.push_back(InternalEntry::EntryData(sst_data + data_offset));
+      data_offset += entry_set.back().size();
+    }
+
+    // Update reference counter at once
+    merge_allocator->RefLast(entry_set.size() - 1);
   }
 
   io_lock_.Lock();

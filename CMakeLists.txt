@@ -9,9 +9,11 @@ set(CMAKE_CXX_STANDARD 11)
 if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
   # set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Werror -fPIC -g -O0 ${CMAKE_CXX_FLAGS}")
   set (CMAKE_CXX_FLAGS "-std=c++11 -fPIC -g -O0 ${CMAKE_CXX_FLAGS}")
+  message("Compile in debug mode...")
 else ()
   # set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -fPIC -O2 ${CMAKE_CXX_FLAGS}")
   set (CMAKE_CXX_FLAGS "-std=c++11 -fPIC -g -O2 ${CMAKE_CXX_FLAGS}")
+  message("Compile in release mode...")
 endif ()
 
 # Generate compile_commands.json for clangd, for C++ on VSCode

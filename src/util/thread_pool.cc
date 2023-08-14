@@ -87,8 +87,7 @@ void TCThreadPool::Start() {
   is_thread_pool_running_.store(true);
 
   while (thread_queue_.size() < kDefaultCoreThreadNum) {
-    thread_queue_.emplace_back(
-        std::thread(&TCThreadPool::BackgroundThreadTask, this));
+    thread_queue_.emplace_back(&TCThreadPool::BackgroundThreadTask, this);
     thread_queue_.back().detach();
   }
 

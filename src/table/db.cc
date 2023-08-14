@@ -2,15 +2,25 @@
 
 TCDB::TCDB(const Config& config)
     : global_lock_(mutex_),
-      io_(config.GetConfig("database_dir"), global_lock_) {
+      mmt_lock_(mmt_mutex_),
+      io_(config.GetConfig("database_dir")) {
   // TODO: If the database already exists, read manifest and update file_id_
   //       and entry_id_.
 
   comparator_ = std::make_shared<InternalEntryComparator>();
 
-  volatile_table_ = new TCTable(global_lock_, comparator_, 0);
+  mem_table_ = new TCTable(mmt_lock_, comparator_, 0);
 
   filter_ = std::make_shared<TCBloomFilter>();
+
+  Manifest manifest;
+  io_.ReadManifest(manifest);  // Assuming always returns StatusNoError
+  version_ctrl_.AppendVersion(TCVersion(manifest));  // Init version
+
+  thread_pool_ = std::make_shared<TCThreadPool>(
+      std::stoi(config.GetConfig("default_core_thread_num")),
+      std::stoi(config.GetConfig("max_task_queue_size")));
+  thread_pool_->Start();
 
   query_cache_ = std::make_shared<TCCache>();  // Default cache size
 
@@ -19,8 +29,8 @@ TCDB::TCDB(const Config& config)
 }
 
 TCDB::~TCDB() {
-  if (volatile_table_ != nullptr)
-    delete volatile_table_;
+  if (mem_table_ != nullptr)
+    delete mem_table_;
 }
 
 std::string TCDB::Get(const Sequence& key) {
@@ -41,21 +51,23 @@ std::string TCDB::Get(const Sequence& key) {
   if (!enc.StatusNoError())
     return std::string();
 
-  // Try to find the entry in volatile_table_
-  // Sequence result = volatile_table_->Get(key);
-  Sequence result = volatile_table_->Get(internal_entry);
+  // Try to find the entry in mem_table_
+  // Sequence result = mem_table_->Get(key);
+  Sequence result = mem_table_->Get(internal_entry);
   if (result.size() != 0) {
     return std::string(result.data(), result.size());
   }
 
   // Not found in the memory, search in the SST files
-  ManifestFormat::ManifestData manifest;
+  // Manifest manifest;
+  // Status ret;
+  // ret = io_.ReadManifest(manifest);
+  // if (!ret.StatusNoError()) {
+  //   // Log the error message
+  //   return std::string();
+  // }
   Status ret;
-  ret = io_.ReadManifest(manifest);
-  if (!ret.StatusNoError()) {
-    // Log the error message
-    return std::string();
-  }
+  Manifest manifest = version_ctrl_.LatestVersion()->manifest();
 
   int level = 0;
   Sequence query_key(internal_entry, entry_size);
@@ -71,27 +83,72 @@ std::string TCDB::Get(const Sequence& key) {
   }
 }
 
+Status TCDB::ConcurrentInsert(const Sequence& key, const Sequence& value) {
+  // TODO: Concurrent unsafe in cache. Why?
+
+  auto insert_bind = std::bind(&TCDB::Insert, this, key, value);
+  // auto ret = thread_pool_->SubmitTask(insert_bind);
+  // return ret.get();
+
+  thread_pool_->SubmitTask(insert_bind);
+  return Status::NoError();
+}
+
 Status TCDB::Insert(const Sequence& key, const Sequence& value) {
   Status ret;
 
-  // TODO: MVCC
+  std::string cur_key(key.data(), key.size());
+  // {
+  //   // TODO: Cache module is not concurrently safe yet.
+  //   std::lock_guard<std::mutex> lock(mutex_);
+  //   // Insert the k-v pair into the cache before inserting to MemTable
+  //   if (!query_cache_->Insert(key, value)) {
+  //     return Status::UndefinedError("Cache insertion operation failed");
+  //   }
+  // }
 
-  // First insert the k-v pair into the cache
-  if (!query_cache_->Insert(key, value)) {
-    return Status::UndefinedError("Cache insertion operation failed");
-  }
+  const TCTable* immutable = nullptr;
+  if (mem_table_->MemUsage() >= kDefaultSSTFileSize) {
+    mmt_trans_lock_.WriteLock();
 
-  if (volatile_table_->MemUsage() >= kDefaultSSTFileSize) {
-    // WriteLevel0
-    global_lock_.Lock();  // Unlock in TransferTable()
-    ret = WriteLevel0();  // volatile_table_ now points to a new TCTable
+    // Double check for the condition
+    if (mem_table_->MemUsage() >= kDefaultSSTFileSize) {
+      // If there has been previous background compaction, block here until the
+      // last compaction finishes.
+      if (compact_future_.valid()) {
+        ret = compact_future_.get();
+        if (!ret.StatusNoError())
+          return ret;
+      }
 
-    if (!ret.StatusNoError()) {
-      return ret;
+      // For test
+      Log("Triggered table transferring and MVCCWriteLevel0 at " + cur_key);
+
+      // Transfer table
+      immutable = mem_table_;
+      mem_table_ =
+          new TCTable(mmt_lock_, comparator_, immutable->GetNextEntryID());
+
+      // // Submit background compaction task
+      // Log("Triggered MVCCWriteLevel0 at " + cur_key);
+
+      // Bind pointer-to-member function with this pointer
+      auto background_compact_task =
+          std::bind(&TCDB::MVCCWriteLevel0, this, std::placeholders::_1);
+
+      compact_future_ =
+          thread_pool_->SubmitTask(background_compact_task, immutable);
     }
+
+    mmt_trans_lock_.WriteUnlock();
   }
 
-  return volatile_table_->Insert(key, value);
+  mmt_trans_lock_.ReadLock();
+  ret = mem_table_->Insert(key, value);
+  mmt_trans_lock_.ReadUnlock();
+  return ret;
+
+  // return mem_table_->Insert(key, value);
 }
 
 Status TCDB::Delete(const Sequence& key) {
@@ -102,20 +159,19 @@ Status TCDB::Delete(const Sequence& key) {
     return Status::UndefinedError("Cache deletion operation failed");
   }
 
-  return volatile_table_->Delete(key);
+  return mem_table_->Delete(key);
 }
 
 bool TCDB::ContainsKey(const Sequence& key) {
   // TODO
-  return volatile_table_->ContainsKey(key);
+  return mem_table_->ContainsKey(key);
 }
 
 Status TCDB::TransferTable(const TCTable** immutable) {
   // global_lock_.Lock();
-  *immutable = volatile_table_;
-  volatile_table_ =
-      new TCTable(global_lock_, comparator_, (*immutable)->GetNextEntryID());
-  global_lock_.Unlock();  // Locked in Insert()
+  *immutable = mem_table_;
+  mem_table_ =
+      new TCTable(mmt_lock_, comparator_, (*immutable)->GetNextEntryID());
 
   return *immutable != nullptr ? Status::NoError() : Status::UndefinedError();
 }
@@ -125,12 +181,12 @@ Status TCDB::WriteLevel0() {
   const TCTable* immutable = nullptr;
 
   if (!TransferTable(&immutable).StatusNoError()) {
-    // The volatile_table_ object failed to be transfered
+    // The mem_table_ object failed to be transfered
     return Status::UndefinedError();
   }
 
   // Read from manifest
-  ManifestFormat::ManifestData manifest;
+  Manifest manifest;
   ret = io_.ReadManifest(manifest);
 
   // If level0 file num reaches default level0 file num, push level0 to level1
@@ -150,7 +206,38 @@ Status TCDB::WriteLevel0() {
   return ret;
 }
 
-Status TCDB::BackgroundCompact(ManifestFormat::ManifestData& manifest) {
+Status TCDB::MVCCWriteLevel0(const TCTable* immutable) {
+  Status ret;
+
+  // Get latest version from the version list instead of reading manifest file
+  auto version_it = version_ctrl_.LatestVersion();
+  Manifest manifest = version_it->manifest();
+
+  // If level0 file num reaches default level0 file num, push level0 to level1
+  if (!manifest.data_files.empty() &&
+      manifest.data_files[0].size() >= kDefaultLevelSize[0]) {
+    ret = BackgroundCompact(manifest);
+    if (!ret.StatusNoError())
+      return ret;
+  }
+
+  ret = io_.WriteLevel0File(immutable, manifest, filter_);
+
+  delete immutable;
+
+  // Update version
+  TCVersion new_version(manifest);
+  new_version.UnRef();  // Unref the newly written version
+  if (!version_ctrl_.AppendVersion(new_version)) {
+    return Status::UndefinedError("The new version already exists");
+  }
+  version_ctrl_.UnrefVersion(*version_it);  // Unref the old version and evict
+                                            // it if the ref_ decreased to 0
+
+  return ret;
+}
+
+Status TCDB::BackgroundCompact(Manifest& manifest) {
   Status ret;
 
   assert(manifest.data_files.size() > 0);
@@ -185,8 +272,8 @@ Status TCDB::BackgroundCompact(ManifestFormat::ManifestData& manifest) {
   return ret;
 }
 
-Status TCDB::CompactSST(ManifestFormat::ManifestData& manifest,
-                        const int current_level, const int compact_file_num) {
+Status TCDB::CompactSST(Manifest& manifest, const int current_level,
+                        const int compact_file_num) {
   Status ret;
 
   std::vector<std::pair<int, int>> compact_file_index{
@@ -292,8 +379,7 @@ Status TCDB::CompactSST(ManifestFormat::ManifestData& manifest,
   // TODO: A background thread should scan the folder and clean old SST files.
 }
 
-Status TCDB::CompactSST(ManifestFormat::ManifestData& manifest,
-                        const int current_level,
+Status TCDB::CompactSST(Manifest& manifest, const int current_level,
                         const std::vector<int>& compact_file_num) {
   Status ret;
 
@@ -603,8 +689,7 @@ Status TCDB::IterMerge(
 }
 
 Status TCDB::SearchLevel(const Sequence& query_key, Sequence& ret_entry,
-                         const ManifestFormat::ManifestData& manifest,
-                         const int level) {
+                         const Manifest& manifest, const int level) {
   Status ret;
 
   assert(level < manifest.data_files.size());
@@ -628,11 +713,12 @@ Status TCDB::SearchLevel(const Sequence& query_key, Sequence& ret_entry,
       if (!ret.StatusNoError())
         return ret;
 
-      // If the query_key is NOT in the range of [iter_min,iter_max]
+      // If the query_key is in the range of [iter_min,iter_max]
       if (comp->LessOrEquals(query_key.data(), iter_max_entry.c_str()) &&
           comp->GreaterOrEquals(query_key.data(), iter_min_entry.c_str())) {
         // The query_key may be in the SST file
         ret = GetFromSST(query_key, ret_entry, file_abs_path, footer);
+        // ret = GetFromSSTv2(query_key, ret_entry, file_abs_path, footer);
         if (!ret.StatusNoError() || ret_entry.size() != 0)  // Error occured or
                                                             // found one record
           return ret;
@@ -654,6 +740,7 @@ Status TCDB::SearchLevel(const Sequence& query_key, Sequence& ret_entry,
           comp->GreaterOrEquals(query_key.data(), iter_min_entry.c_str())) {
         // The key may be in the range of [iter_min_entry, iter_max_entry]
         return GetFromSST(query_key, ret_entry, file_abs_path, footer);
+        // return GetFromSSTv2(query_key, ret_entry, file_abs_path, footer);
       }  // Else not in the range, continue.
     }
   }
@@ -697,7 +784,9 @@ Status TCDB::GetFromSST(const Sequence& query_key, Sequence& ret_entry,
       return ret;
     for (auto& e : entry_set) {  // Ascending order
       if (comp->Equal(e.data(), query_key.data())) {
+        mutex_.lock();
         char* ret_entry_ptr = query_buffer_->Allocate(e.size());
+        mutex_.unlock();
         std::memcpy(ret_entry_ptr, e.data(), e.size());
         ret_entry = Sequence(ret_entry_ptr, e.size());
         return ret;
@@ -715,6 +804,65 @@ Status TCDB::GetFromSST(const Sequence& query_key, Sequence& ret_entry,
     }
 
     entry_set.clear();
+  }
+
+  return ret;
+}
+
+Status TCDB::GetFromSSTv2(const Sequence& query_key, Sequence& ret_entry,
+                          const std::string& file_abs_path,
+                          const DataFileFormat::Footer& footer) {
+  Status ret;
+
+  // Search in the bloom filter
+  auto query_key_value = InternalEntry::EntryKey(query_key.data());
+  std::string filter;
+  ret = io_.ReadSSTFlexible(file_abs_path, footer, filter);
+  if (!ret.StatusNoError() || !filter_->ContainsKey(query_key_value, filter))
+    return ret;
+
+  std::vector<uint32_t> index_block;
+  ret = io_.ReadSSTIndex(file_abs_path, footer, index_block);
+  if (!ret.StatusNoError())
+    return ret;
+  // For conveniently calculating the size of the last block
+  index_block.push_back(footer.data_blk_size);
+
+  std::shared_ptr<QueryComparator> comp = std::make_shared<QueryComparator>();
+  std::shared_ptr<MemAllocator> query_allocator =
+      std::make_shared<QueryAllocator>();
+  std::vector<Sequence> entry_set;
+  Sequence candidate;
+
+  ret = io_.ReadSSTDataAll(file_abs_path, query_allocator, entry_set,
+                           footer.data_blk_size, 0);
+  if (!ret.StatusNoError())
+    return ret;
+
+  // Binary search, valid size of the index_block is <size - 1>
+  int l = 0, r = entry_set.size() - 1;  // IndexBlock shouldn't be too large,
+                                        // so int for index should be enough
+  while (l <= r) {
+    auto mid = (l + r) / 2;
+    auto e = entry_set[mid];
+
+    if (comp->Equal(e.data(), query_key.data())) {
+      mutex_.lock();
+      char* ret_entry_ptr = query_buffer_->Allocate(e.size());
+      mutex_.unlock();
+      std::memcpy(ret_entry_ptr, e.data(), e.size());
+      ret_entry = Sequence(ret_entry_ptr, e.size());
+      return ret;
+    }
+
+    // query_key not equal to e, keep binary searching
+    if (comp->Greater(query_key.data(), e.data())) {
+      // The query_key is larger than the largest entry in the block
+      l = mid + 1;
+    } else {
+      // The query_key is less than the smallest entry in the block
+      r = mid - 1;
+    }
   }
 
   return ret;

@@ -9,7 +9,7 @@ target_link_libraries(
   pthread
 )
 
-# Performance test
+# Main test
 add_executable(main_test main_test.cc)
 
 target_link_libraries(
@@ -19,3 +19,16 @@ target_link_libraries(
   -Wl,--end-group
   pthread
 )
+
+# Performance test
+add_executable(perf_test perf_test.cc)
+
+target_link_libraries(
+  perf_test
+  -Wl,--start-group
+  ${STATIC_LIB_LIST}
+  -Wl,--end-group
+  pthread
+)
+
+add_subdirectory("mvcc_demo")

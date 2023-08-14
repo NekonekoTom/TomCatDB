@@ -7,8 +7,11 @@ TCTable::TCTable(RAIILock& lock,
       table_(comparator, invalid_key_),
       mem_allocator_(std::make_shared<MemAllocator>()),
       query_allocator_(std::make_shared<MemAllocator>()),
-      table_lock_(lock),
-      entry_id_(first_entry_id) {}
+      table_lock_(lock)
+// entry_id_(first_entry_id) {}
+{
+  entry_id_.store(first_entry_id);
+}
 
 TCTable::~TCTable() {
   if (invalid_key_ != nullptr)
@@ -82,6 +85,24 @@ Status TCTable::Insert(const Sequence& key, const Sequence& value) {
 
   return Status::NoError();
 }
+
+// Status TCTable::Insert(const Sequence& key, const Sequence& value) {
+//   // See InternalEntry.h for format info
+//   uint64_t entry_size = coding::SizeOfVarint(key.size()) + key.size() + 9 +
+//                         coding::SizeOfVarint(value.size()) + value.size();
+
+//   // TCTable is in charge of allocating and managing the memory
+//   // The underlying SkipList DOES NOT hold any data resources
+//   char* internal_entry = mem_allocator_->Allocate(entry_size);
+
+//   Status enc = InternalEntry::EncodeInternal(
+//       key, value, entry_id_++, InternalEntry::OpType::kInsert, internal_entry);
+//   if (enc.StatusNoError()) {
+//     table_.Insert(internal_entry);
+//   }
+
+//   return Status::NoError();
+// }
 
 Status TCTable::Delete(const Sequence& key) {
   uint64_t entry_size = coding::SizeOfVarint(key.size()) + key.size() + 9;

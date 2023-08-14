@@ -46,19 +46,37 @@ TomCatDB provides two build pipelines.
 # **Performance**
 - Write performance:
   When compiling with `-O2` optimization, TomCatDB's write performance is shown in the chart below.
+  Sequential write:
   | Data scale | Write time (second) | Estimated QPS |
   | ---------- | ------------------- | ------------- |
-  | 100'000    | 0.13755             | 727000        |
-  | 500'000    | 1.31968             | 379000        |
-  | 1'000'000  | 4.47094             | 224000        |
+  | 100'000    | 0.250               | 400000        |
+  | 500'000    | 1.865               | 268097        |
+  | 1'000'000  | 4.834               | 206868        |
 
-<!-- - Read performance (before optimization):
-  Sequential read (all requests are for existing key-values):
+  Concurrently write by 4 threads:
+  | Data scale | Write time (second) | Estimated QPS |
+  | ---------- | ------------------- | ------------- |
+  | 100'000    | 0.294               | 340000        |
+  | 500'000    | 1.787               | 280000        |
+  | 1'000'000  | 4.471               | 224000        |
+
+- Read performance (Disabled cache):
+  All requests are for existing key-values, which means the bloom filter will never be hit.
+  Sequential read:
   | Data scale | Read time (second)  | Estimated QPS |
   | ---------- | ------------------- | ------------- |
-  | 100'000    | 5.04919             | 20000         |
-  | 500'000    | 45.7459             | 11000         |
-  | 1'000'000  | 170.361             | 6000          | -->
+  | 100'000    | 7.217               | 13856         |
+  | 500'000    | 67.476              | 7410          |
+  | 1'000'000  | 204.316             | 4894          |
+
+  Concurrently read by 4 threads:
+  | Data scale | Read time (second)  | Estimated QPS |
+  | ---------- | ------------------- | ------------- |
+  | 100'000    | 4.223               | 23223         |
+  | 500'000    | 33.016              | 15144         |
+  | 1'000'000  | 98.153              | 10188         |
+
+- To reproduce the performance test, please run `./bin/perf_test`. The result may differ under different platforms, hardware configurations, data scales and entry sizes.
 
 # **Others**
 ## TODO list
@@ -66,7 +84,7 @@ TomCatDB provides two build pipelines.
 
 -[x] Bloom filter.
 
--[ ] Multithread access.
+-[x] Multithread access.
 
 -[ ] More functions for TCLogger.
 

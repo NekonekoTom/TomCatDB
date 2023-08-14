@@ -2,8 +2,9 @@
 #include "config.h"
 #include "db_table.h"
 #include "io.h"
-#include "raii_lock.h"
+#include "lock_util.h"
 #include "thread_pool.h"
+#include "version.h"
 #include "writer.h"
 
 class TCDB {
@@ -41,22 +42,24 @@ class TCDB {
 
   Status Insert(const Sequence& key, const Sequence& value);
 
+  Status ConcurrentInsert(const Sequence& key, const Sequence& value);
+
   Status Delete(const Sequence& key);
 
   bool ContainsKey(const Sequence& key);
 
   Status Log(const std::string& msg) { return io_.Log(msg); }
 
-  // For test
-  const std::vector<const char*> EntrySet() {
-    return volatile_table_->EntrySet();
-  }
+  // // For test
+  // const std::vector<const char*> EntrySet() {
+  //   return mem_table_->EntrySet();
+  // }
 
   // For test: compactions, write files...
   void TestEntryPoint() {
     // WriteLevel0();  // Done
 
-    ManifestFormat::ManifestData manifest;
+    Manifest manifest;
     io_.ReadManifest(manifest);
 
     Status ret = BackgroundCompact(manifest);
@@ -68,27 +71,31 @@ class TCDB {
  private:
   Status TransferTable(const TCTable** immutable);
 
-  // This function is triggered when the volatile_table_ reaches max size
+  // This function is triggered when the mem_table_ reaches max size
   Status WriteLevel0();
+
+  // MVCCWriteLevel0 has similar behavior to the WriteLevel0,
+  // but this function is concurrently safe.
+  // This function is triggered when the mem_table_ reaches max size.
+  Status MVCCWriteLevel0(const TCTable* immutable);
 
   // Start background compaction, and return whether the compaction process was
   // successfully started. The compaction process may take a lot of time, so
   // any operation would be recorded in the LOG file and executed after the
   // compaction is finished.
-  Status BackgroundCompact(ManifestFormat::ManifestData& manifest);
+  Status BackgroundCompact(Manifest& manifest);
 
   // Compact the SST file. Find all overlapped SST files at current level (if
   // current_level == 0) and the next level (current_level + 1), make a vector
   // that includes all overlapped files, and then call MultiwayMerge().
-  Status CompactSST(ManifestFormat::ManifestData& manifest,
-                    const int current_level, const int compact_file_num);
+  Status CompactSST(Manifest& manifest, const int current_level,
+                    const int compact_file_num);
 
   // Compact the SST file. Find all overlapped SST files at current level (if
   // current_level == 0) and the next level (current_level + 1), make a vector
   // that includes all overlapped files, and then call MultiwayMerge().
   // Note: all files are at the same level and MUST be continuous!
-  Status CompactSST(ManifestFormat::ManifestData& manifest,
-                    const int current_level,
+  Status CompactSST(Manifest& manifest, const int current_level,
                     const std::vector<int>& compact_file_num);
 
   // Called by BackgroundCompact(). This function initializes the multiway
@@ -119,8 +126,7 @@ class TCDB {
 
   // Search the query_key on the specified level
   Status SearchLevel(const Sequence& query_key, Sequence& ret_key,
-                     const ManifestFormat::ManifestData& manifest,
-                     const int level);
+                     const Manifest& manifest, const int level);
 
   // Get query_key and corresponding value from the SST file.
   // If the query_key exists, it should be unique and the searching process
@@ -129,23 +135,44 @@ class TCDB {
                     const std::string& file_abs_path,
                     const DataFileFormat::Footer& footer);
 
+  // Get query_key and corresponding value from the SST file.
+  // If the query_key exists, it should be unique and the searching process
+  // will exit once a "Equal" key is found.
+  // Note: The v2 version of GetFromSST reads the entire SST file into the
+  //       memory at one time instead of multiple reads in the previous version.
+  Status GetFromSSTv2(const Sequence& query_key, Sequence& ret_key,
+                      const std::string& file_abs_path,
+                      const DataFileFormat::Footer& footer);
+
   std::mutex mutex_;  // Basic mutex
+
+  std::mutex compact_mutex_;  // Mutex for compaction
+
+  std::mutex mmt_mutex_;  // Mutex for concurrently write the mem_table_
 
   RAIILock global_lock_;
 
+  RAIILock mmt_lock_;  // Lock for concurrently write the mem_table_
+
+  ReadWriteLock mmt_trans_lock_;
+
   std::shared_ptr<InternalEntryComparator> comparator_;
 
-  TCTable* volatile_table_;
+  TCTable* volatile mem_table_;
 
   std::shared_ptr<Filter> filter_;
 
   TCIO io_;
 
-  TCThreadPool worker_;
+  TCVersionCtrl version_ctrl_;
+
+  std::shared_ptr<TCThreadPool> thread_pool_;
 
   // Cache module for the keys and values. Both key and value should be of type
   // Sequence, the Cache is in charge of underlying storage for the Sequence.
   std::shared_ptr<TCCache> query_cache_;
 
   std::shared_ptr<MemAllocator> query_buffer_;
+
+  std::future<Status> compact_future_;
 };

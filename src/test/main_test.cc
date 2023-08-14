@@ -29,7 +29,6 @@ int main() {
   for (int circle = 0; circle < 5; ++circle) {
     for (int i = 0; i < records; ++i) {
       db.Insert(csv_data[i][0] + "Circle-" + std::to_string(circle), csv_data[i][10]); // id and description
-      // why_status = db.Insert(csv_data[i][0] + "Circle-" + std::to_string(circle), csv_data[i][20]); // id and name
       if (!why_status.StatusNoError())
         std::cout << i << why_status.ErrMsg() << std::endl;
       // db.Insert(csv_data[i][0], csv_data[i][10]); // id and description

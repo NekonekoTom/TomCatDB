@@ -6,7 +6,7 @@
 #include <future>
 #include <iostream>  // for test
 #include "base.h"
-#include "raii_lock.h"
+#include "lock_util.h"
 
 // Deprecated
 // Usage:

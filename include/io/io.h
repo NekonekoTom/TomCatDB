@@ -35,12 +35,11 @@ class TCIO {
   TCIO& operator=(const TCIO&) = delete;
 
   // TODO: Construct by Config object?
-  TCIO(const std::string& files_dir, RAIILock& io_lock);
+  TCIO(const std::string& files_dir);
 
   ~TCIO();
 
-  Status WriteLevel0File(const TCTable* immutable,
-                         Manifest& manifest,
+  Status WriteLevel0File(const TCTable* immutable, Manifest& manifest,
                          const std::shared_ptr<Filter>& filter);
 
   // Different from the implementation of WriteLevel0File(), the caller
@@ -132,6 +131,11 @@ class TCIO {
                           const ::ssize_t offset,
                           const int reuse_block_id = -1);
 
+  Status ReadSSTDataAll(const std::string& file_abs_path,
+                     std::shared_ptr<MemAllocator>& merge_allocator,
+                     std::vector<Sequence>& entry_set, const uint64_t size,
+                     const ::ssize_t offset);
+
   // TODO: Argument?
   // Status WriteSSTFile(const std::vector<const char*> entry_set);
 
@@ -203,5 +207,7 @@ class TCIO {
   uint64_t file_id_ = 0;
 
   // Protect readers_ vector from concurrent unsafety
-  RAIILock& io_lock_;
+  RAIILock io_lock_;
+
+  std::mutex io_mutex_;
 };

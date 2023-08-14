@@ -249,7 +249,7 @@ class TCCache {
   // Sequence's data pointer expiration.
   bool Get(const Sequence& key, std::string& value);
 
-  const uint32_t size() const { return size_; }
+  const uint32_t size() const { return cache_->size(); }
 
  private:
   // Insert or update the key-value pair in the cache. The value starts with
@@ -260,9 +260,41 @@ class TCCache {
   //   OpType = 0(0x00), and the value data is empty.
   bool InsertOrUpdate(const Sequence& key, const Sequence& value);
 
-  uint32_t size_ = 0;
-
   std::shared_ptr<Cache<Sequence, Sequence>> cache_;
+};
+
+struct SSTPage {
+  uint64_t sst_id;
+};
+
+class TCPageCache {
+ public:
+  static constexpr int kDefaultCacheSize = 1 << 7;
+
+  TCPageCache() : TCPageCache(kDefaultCacheSize) {}
+  explicit TCPageCache(const int cache_size);
+
+  TCPageCache(const TCPageCache&) = delete;
+  TCPageCache& operator=(const TCPageCache&) = delete;
+
+  ~TCPageCache() = default;
+
+  // Insert an SST page into the cache. Call InsertOrUpdate().
+  bool Insert(const SSTPage& page);
+
+  // Delete an SST page from the cache. Call InsertOrUpdate().
+  bool Delete(const SSTPage& page);
+
+  // Return true if the page is in the cache, false otherwise.
+  bool Get(const SSTPage& page);
+
+  const uint32_t size() const { return cache_->size(); }
+
+ private:
+  // Insert or update the key-value pair in the cache.
+  bool InsertOrUpdate(const SSTPage& page);
+
+  std::shared_ptr<Cache<uint64_t, std::vector<Sequence>>> cache_;
 };
 
 #endif
